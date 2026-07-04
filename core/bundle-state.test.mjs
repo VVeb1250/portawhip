@@ -9,7 +9,7 @@ import {
   resolveRecipePaths,
   writeActiveSelection,
 } from "./bundle-state.mjs";
-import { buildIndex, mergeRawEntries } from "./registry.mjs";
+import { buildIndex, isDiscovered, mergeRawEntries } from "./registry.mjs";
 
 function tmpProject() {
   return mkdtempSync(join(tmpdir(), "harness-bundle-"));
@@ -138,6 +138,28 @@ test("registry: buildIndex composes multiple recipe files into one curated set",
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
+});
+
+// Regression: mise keys a backend-qualified install (e.g. "pipx:markitdown")
+// by that full string, not the clean id a recipe entry chooses ("markitdown")
+// - found live 2026-07-05 when route() stayed silent for an actually-installed
+// markitdown because the gate only compared entry.id against discovery.
+test("registry: isDiscovered matches on entry.source when discovery's id differs (backend-qualified sources)", () => {
+  const entry = { id: "markitdown", source: "pipx:markitdown" };
+  const discovered = [{ id: "pipx:markitdown", source: "pipx:markitdown", type: "cli" }];
+  assert.equal(isDiscovered(entry, discovered), true);
+});
+
+test("registry: isDiscovered still matches the plain case (id === source)", () => {
+  const entry = { id: "ast-grep", source: "ast-grep" };
+  const discovered = [{ id: "ast-grep", source: "ast-grep", type: "cli" }];
+  assert.equal(isDiscovered(entry, discovered), true);
+});
+
+test("registry: isDiscovered returns false when neither id nor source is present", () => {
+  const entry = { id: "gitleaks", source: "gitleaks" };
+  const discovered = [{ id: "ast-grep", source: "ast-grep", type: "cli" }];
+  assert.equal(isDiscovered(entry, discovered), false);
 });
 
 test("registry: buildIndex with a single string path still works exactly as before (backward compat)", async () => {

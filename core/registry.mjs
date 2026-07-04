@@ -99,6 +99,20 @@ export function mergeRawEntries(recipePath) {
   return [...byId.values()];
 }
 
+// discoverCli() keys installed CLI tools by mise's OWN install key, which
+// for a backend-qualified source (e.g. "pipx:markitdown") is that full
+// string, not the clean id a recipe entry chooses (e.g. "markitdown"). Every
+// other bundle entry so far used a bare mise registry name where id ===
+// source, so this never surfaced until markitdown - caught live 2026-07-05:
+// route() stayed silent for markitdown even after it was actually installed,
+// because the gate only checked entry.id and never found the
+// "pipx:markitdown" key discovery actually produced. Checking entry.source
+// too covers both cases without needing to know which convention a given
+// backend uses.
+export function isDiscovered(entry, discovered) {
+  return discovered.some((e) => e.id === entry.id || (entry.source && e.source === entry.source));
+}
+
 export async function buildIndex(recipePath = "recipe.yaml", { discover = true } = {}) {
   const paths = Array.isArray(recipePath) ? recipePath : [recipePath];
   if (paths.length === 0) throw new Error("buildIndex: at least one recipe path is required");
@@ -112,7 +126,6 @@ export async function buildIndex(recipePath = "recipe.yaml", { discover = true }
   const { byId, sourceById } = mergeWithProvenance(paths);
 
   const discovered = discover ? await discoverAll() : [];
-  const discoveredIds = new Set(discovered.map((e) => e.id));
 
   // Bundle-sourced entries (foundry.yaml / recipes/roles/*.yaml) carry
   // curated route metadata but are NOT presumed installed just because a
@@ -129,7 +142,7 @@ export async function buildIndex(recipePath = "recipe.yaml", { discover = true }
   const curated = [];
   for (const entry of byId.values()) {
     const fromBundle = sourceById.get(entry.id) !== trustedPath;
-    if (discover && fromBundle && !discoveredIds.has(entry.id)) continue;
+    if (discover && fromBundle && !isDiscovered(entry, discovered)) continue;
     curated.push({
       id: entry.id,
       type: entry.type,

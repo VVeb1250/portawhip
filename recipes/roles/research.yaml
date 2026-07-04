@@ -12,3 +12,20 @@
     when: [user_prompt]
     inject: hint
     binary: pandoc
+
+# markitdown converts binary office/PDF documents to LLM-friendly markdown -
+# the common research-material-ingestion step pandoc doesn't cover well
+# (pandoc is markup<->markup; markitdown targets docx/pptx/xlsx/pdf/images
+# specifically). Installed live via mise's pipx backend on 2026-07-05
+# (`source: pipx:markitdown` - no short-name alias in mise's own registry,
+# but the pipx-qualified name resolves and installs cleanly: pure Python
+# wheels, no compiler needed, ~25MB, a few seconds).
+- id: markitdown
+  type: cli
+  source: pipx:markitdown
+  route:
+    triggers: ["convert to markdown", "markitdown", "extract text from pdf", "docx to text", "read office document"]
+    description: "Convert docx/pptx/xlsx/pdf/images to markdown for LLM-friendly reading"
+    when: [user_prompt]
+    inject: hint
+    binary: markitdown
