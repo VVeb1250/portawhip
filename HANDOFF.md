@@ -60,13 +60,25 @@ config writes backed up first (`link-hooks.mjs` itself has **no built-in
 backup** — back up the 3 global paths manually before ever re-running
 `install`/`remove --scope global`: `~/.claude/settings.json`,
 `~/.codex/hooks.json`, `~/.gemini/settings.json`).
-`adapters/claude-code/push-hook.mjs` and `feedback-mark-hook.mjs` are now
-dead code (superseded by `universal-hook.mjs`) — not deleted yet, no
-proven need to, but don't extend them further; extend `universal-hook.mjs`
-instead.
+`adapters/claude-code/push-hook.mjs`, `feedback-mark-hook.mjs`, and
+`scripts/install-push-hook.mjs` were deleted (2026-07-04, later same day) —
+fully superseded by `universal-hook.mjs` + `link-hooks.mjs`, confirmed no
+other references except historical mentions in this file and
+`docs/phase3/4-verify.md` (left as-is, they're a record of what was true
+at the time). `core/registry.mjs`'s `route.binary` comment updated to
+point at the current consumer.
 
-Remaining real gap: `claude-desktop`'s MCP link itself reads `missing` (not
-just the instruction layer) — unexplored, not just deprioritized.
+**`claude-desktop`'s MCP link reads `missing` — root cause found, not
+fixable here.** `add-mcp`'s `listInstalledServers({agents:["claude-desktop"]})`
+finds the config file (`%APPDATA%\Claude\claude_desktop_config.json`) but
+it has **no `mcpServers` key at all** — this machine's Claude Desktop is
+running a newer "Cowork"-style config schema, not the classic
+`{"mcpServers": {...}}` format `add-mcp` reads. `servers: []` for every
+agent, not just harness-router — nothing has ever been installed there via
+add-mcp, unrelated to this project. This is an upstream `add-mcp`/Claude
+Desktop version mismatch, not our bug — matches "delegate, don't rebuild":
+we don't own add-mcp's config-format detection. No further action here
+unless add-mcp ships support for the newer schema.
 
 ## Known bugs found and fixed this session (don't reintroduce)
 

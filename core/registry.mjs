@@ -48,7 +48,7 @@ function validateRoute(entry) {
     // CLI entries' `source` is the package manager's name (mise/etc), which
     // often differs from the actual invoked binary (e.g. source "ripgrep"
     // -> binary "rg"). Optional, only needed for Bash-usage feedback
-    // matching in adapters/claude-code/feedback-mark-hook.mjs.
+    // matching in adapters/hooks/universal-hook.mjs.
     binary: r.binary ?? null,
     // Per-project readiness (VISION.md gap: tools installed globally but
     // needing local init, e.g. codegraph's .codegraph/ index). Existence
