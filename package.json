@@ -1,9 +1,14 @@
 {
-  "name": "portable-harness-v2",
+  "name": "portawhip",
   "private": true,
   "type": "module",
-  "version": "0.0.1",
-  "description": "Step 1 proof: one recipe format, dispatched to existing backends (add-mcp / mise / asm), verified across hosts.",
+  "version": "0.1.0",
+  "description": "Tools collector + context-cheap router for AI agent hosts: dispatches capability install to add-mcp/mise/asm, then routes the right one at the right moment instead of loading everything into context.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/VVeb1250/portawhip.git"
+  },
   "scripts": {
     "load": "node scripts/load.mjs",
     "doctor": "node scripts/doctor.mjs",
