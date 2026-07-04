@@ -17,6 +17,9 @@ import { fileURLToPath } from "node:url";
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(HERE, "..");
 const DISCOVERY_MAX_BUFFER = 16 * 1024 * 1024;
+const SKILL_SCAN_MAX_DEPTH = 9;
+const SKIP_DIRS = new Set([".git", "node_modules"]);
+const SURFACE_SKIP_DIRS = new Set(["docs"]);
 
 // Small, deliberately conservative stoplist: generic words that appear in
 // almost every skill description and would otherwise become high-frequency
@@ -63,32 +66,145 @@ function parseSkillFrontmatter(text, fallbackName) {
   return { name, description };
 }
 
-function discoverSkillsFromDirs() {
-  const roots = [
+function parseMarkdownFrontmatter(text, fallbackName) {
+  const match = String(text ?? "").match(/^---\r?\n([\s\S]*?)\r?\n---/);
+  const data = {};
+  if (match) {
+    for (const line of match[1].split(/\r?\n/)) {
+      const field = line.match(/^([A-Za-z0-9_-]+):\s*(.*)$/);
+      if (!field) continue;
+      data[field[1]] = field[2].replace(/^["']|["']$/g, "").trim();
+    }
+  }
+  const heading = String(text ?? "").match(/^#\s+(.+)$/m)?.[1]?.trim();
+  return {
+    name: data.name || fallbackName,
+    description: data.description || heading || "",
+  };
+}
+
+function markdownFilesUnder(root, segmentName, maxDepth = SKILL_SCAN_MAX_DEPTH) {
+  const found = [];
+  if (!existsSync(root)) return found;
+  const stack = [{ dir: root, depth: 0, inSegment: false }];
+  while (stack.length > 0) {
+    const { dir, depth, inSegment } = stack.pop();
+    let dirents;
+    try {
+      dirents = readdirSync(dir, { withFileTypes: true });
+    } catch {
+      continue;
+    }
+    for (const dirent of dirents) {
+      const path = join(dir, dirent.name);
+      if (dirent.isFile() && inSegment && dirent.name.endsWith(".md")) {
+        found.push(path);
+        continue;
+      }
+      if (!dirent.isDirectory() && !dirent.isSymbolicLink()) continue;
+      if (SKIP_DIRS.has(dirent.name)) continue;
+      if (!inSegment && SURFACE_SKIP_DIRS.has(dirent.name)) continue;
+      if (depth >= maxDepth) continue;
+      stack.push({ dir: path, depth: depth + 1, inSegment: inSegment || dirent.name === segmentName });
+    }
+  }
+  return found;
+}
+
+function fileStem(path) {
+  return path.split(/[\\/]/).pop().replace(/\.md$/i, "");
+}
+
+function discoverMarkdownSurface(type, segmentName, roots = defaultPluginRoots()) {
+  const seen = new Map();
+  for (const root of roots) {
+    for (const path of markdownFilesUnder(root, segmentName)) {
+      try {
+        const fallback = fileStem(path);
+        const metadata = parseMarkdownFrontmatter(readFileSync(path, "utf8"), fallback);
+        const id = metadata.name || fallback;
+        if (seen.has(id)) continue;
+        const description = truncate(metadata.description || `${type}: ${id}`);
+        const slash = type === "command" ? `/${fallback}` : fallback;
+        seen.set(id, {
+          id,
+          type,
+          source: path,
+          path,
+          origin: `auto:${type}`,
+          route: {
+            triggers: [id, slash, ...extractKeywords(id, description)],
+            description,
+            when: ["user_prompt"],
+            inject: "hint",
+          },
+        });
+      } catch {
+        // A malformed markdown file should not block the whole surface scan.
+      }
+    }
+  }
+  return [...seen.values()];
+}
+
+export function defaultSkillRoots() {
+  return [
     join(homedir(), ".codex", "skills"),
     join(homedir(), ".agents", "skills"),
     join(homedir(), ".claude", "skills"),
+    join(homedir(), ".claude", "plugins", "cache"),
+    join(homedir(), ".claude", "plugins", "marketplaces"),
   ];
+}
+
+export function defaultPluginRoots() {
+  return [
+    join(homedir(), ".claude", "plugins", "cache"),
+    join(homedir(), ".claude", "plugins", "marketplaces"),
+  ];
+}
+
+function scanSkillDirs(root, maxDepth = SKILL_SCAN_MAX_DEPTH) {
   const found = [];
-  for (const root of roots) {
-    if (!existsSync(root)) continue;
-    for (const dirent of readdirSync(root, { withFileTypes: true })) {
-      if (!dirent.isDirectory() && !dirent.isSymbolicLink()) continue;
-      const skillDir = join(root, dirent.name);
-      const skillFile = join(skillDir, "SKILL.md");
-      if (!existsSync(skillFile)) continue;
+  if (!existsSync(root)) return found;
+  const stack = [{ dir: root, depth: 0 }];
+  while (stack.length > 0) {
+    const { dir, depth } = stack.pop();
+    const skillFile = join(dir, "SKILL.md");
+    if (existsSync(skillFile)) {
       try {
         if (!statSync(skillFile).isFile()) continue;
-        const frontmatter = parseSkillFrontmatter(readFileSync(skillFile, "utf8"), dirent.name);
+        const frontmatter = parseSkillFrontmatter(readFileSync(skillFile, "utf8"), dir.split(/[\\/]/).pop());
         found.push({
           name: frontmatter.name,
           description: frontmatter.description,
-          path: skillDir,
+          path: dir,
         });
       } catch {
         // A broken symlink or unreadable skill should not break all discovery.
       }
+      continue;
     }
+    if (depth >= maxDepth) continue;
+    let dirents;
+    try {
+      dirents = readdirSync(dir, { withFileTypes: true });
+    } catch {
+      continue;
+    }
+    for (const dirent of dirents) {
+      if (!dirent.isDirectory() && !dirent.isSymbolicLink()) continue;
+      if (SKIP_DIRS.has(dirent.name)) continue;
+      stack.push({ dir: join(dir, dirent.name), depth: depth + 1 });
+    }
+  }
+  return found;
+}
+
+export function discoverSkillsFromDirs(roots = defaultSkillRoots()) {
+  const found = [];
+  for (const root of roots) {
+    found.push(...scanSkillDirs(root));
   }
   return found;
 }
@@ -139,14 +255,14 @@ export function discoverSkills() {
   candidates.push(["npx", ["--yes", "agent-skill-manager", "list", "--json"]]);
 
   const result = runJsonCommand(candidates);
-  let skills = [];
+  let skills = discoverSkillsFromDirs();
   if (!result.ok) {
-    skills = discoverSkillsFromDirs();
+    // Filesystem discovery above is the fallback source of truth.
   } else {
     try {
-      skills = JSON.parse(result.stdout);
+      skills = [...JSON.parse(result.stdout), ...skills];
     } catch {
-      skills = discoverSkillsFromDirs();
+      // Keep filesystem discovery if ASM returns malformed JSON.
     }
   }
   // The same skill is commonly installed under the same name in several
@@ -196,11 +312,26 @@ export function discoverCli() {
   }));
 }
 
+export function discoverCommands(roots = defaultPluginRoots()) {
+  return discoverMarkdownSurface("command", "commands", roots);
+}
+
+export function discoverAgents(roots = defaultPluginRoots()) {
+  return discoverMarkdownSurface("agent", "agents", roots);
+}
+
 export async function discoverAll() {
-  const [mcp, skills, cli] = await Promise.all([
+  const [mcp, skills, cli, commands, agents] = await Promise.all([
     discoverMcp(),
     Promise.resolve(discoverSkills()),
     Promise.resolve(discoverCli()),
+    Promise.resolve(discoverCommands()),
+    Promise.resolve(discoverAgents()),
   ]);
-  return [...mcp, ...skills, ...cli];
+  const byId = new Map();
+  for (const entry of [...mcp, ...skills, ...cli, ...commands, ...agents]) {
+    if (byId.has(entry.id)) continue;
+    byId.set(entry.id, entry);
+  }
+  return [...byId.values()];
 }

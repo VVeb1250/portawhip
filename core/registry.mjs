@@ -40,6 +40,9 @@ function validateRoute(entry) {
   if (r.binary !== undefined && typeof r.binary !== "string") {
     throw new Error(`${entry.id}: route.binary must be a string`);
   }
+  if (r.action !== undefined && typeof r.action !== "string") {
+    throw new Error(`${entry.id}: route.action must be a string`);
+  }
   return {
     triggers: r.triggers,
     description: r.description,
@@ -50,6 +53,7 @@ function validateRoute(entry) {
     // -> binary "rg"). Optional, only needed for Bash-usage feedback
     // matching in adapters/hooks/universal-hook.mjs.
     binary: r.binary ?? null,
+    action: r.action ?? null,
     // Per-project readiness (VISION.md gap: tools installed globally but
     // needing local init, e.g. codegraph's .codegraph/ index). Existence
     // check only — no arbitrary probe command, no shell/subprocess surface.

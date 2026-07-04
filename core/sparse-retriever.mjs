@@ -64,7 +64,14 @@ export function sparseRetrieve(docs, query, { k = 20, minScore = 2 } = {}) {
       // let an auto-discovered "pdf" skill (576) outrank the curated
       // "anthropic-skills" entry (318) for the same underlying capability.
       const score = doc?.origin === "recipe" ? hit.score * 1.25 : hit.score;
-      return { id: hit.id, doc, score };
+      return {
+        id: hit.id,
+        doc,
+        score,
+        terms: hit.terms ?? [],
+        queryTerms: hit.queryTerms ?? [],
+        match: hit.match ?? {},
+      };
     })
     .filter((item) => item.doc && item.score >= minScore)
     .sort((a, b) => b.score - a.score || a.id.localeCompare(b.id))

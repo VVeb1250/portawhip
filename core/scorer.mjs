@@ -39,17 +39,25 @@ export function route(index, prompt, { threshold, recipeThreshold, k, suggest = 
     })
     .sort((a, b) => b.score - a.score)
     .slice(0, k)
-    .map(({ entry, score }) => ({
-      id: entry.id,
-      type: entry.type,
-      kind: capabilityKind(entry.type),
-      score,
-      how_to_use: entry.route.description,
-      pointer: entry.path ?? entry.source,
-      origin: entry.origin,
-      readyMarker: entry.route.readyMarker ?? null,
-      readyHint: entry.route.readyHint ?? null,
-    }));
+    .map(({ entry, score }) => {
+      const bar = entry.origin === "recipe" ? recipeThreshold : threshold;
+      const confidence = bar > 0 ? Math.min(1, score / bar) : 1;
+      return {
+        id: entry.id,
+        type: entry.type,
+        kind: capabilityKind(entry.type),
+        score,
+        tier: entry.origin === "recipe" ? "required" : "recommended",
+        confidence: Number(confidence.toFixed(2)),
+        why: `matched ${score} route trigger${score === 1 ? "" : "s"}`,
+        action: entry.route.action ?? (entry.type === "skill" ? "read_skill" : "use_capability"),
+        how_to_use: entry.route.description,
+        pointer: entry.path ?? entry.source,
+        origin: entry.origin,
+        readyMarker: entry.route.readyMarker ?? null,
+        readyHint: entry.route.readyHint ?? null,
+      };
+    });
 }
 
 export function listAll(index, type) {

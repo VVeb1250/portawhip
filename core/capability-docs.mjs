@@ -115,6 +115,7 @@ export function buildCapabilityDocs(index) {
         related: metadata.related ?? null,
         readyMarker: entry.route.readyMarker ?? null,
         readyHint: entry.route.readyHint ?? null,
+        action: entry.route.action ?? null,
       };
       const text = uniq([
         entry.id,

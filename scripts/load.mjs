@@ -94,6 +94,11 @@ const DISPATCH = { mcp: loadMcp, cli: loadCli, skill: loadSkill };
 export function installEntries(entries, hosts, scope = "global") {
   const results = [];
   for (const entry of entries) {
+    if (entry.install === false) {
+      console.log(`skip ${entry.id}: route-only entry`);
+      results.push({ id: entry.id, ok: true, skipped: true });
+      continue;
+    }
     const handler = DISPATCH[entry.type];
     if (!handler) {
       console.error(`unknown type "${entry.type}" for ${entry.id}`);

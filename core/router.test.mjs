@@ -5,12 +5,22 @@ import { compileCapabilityGraph } from "./capability-graph-compiler.mjs";
 import { route, listAll, scoreEntry } from "./scorer.mjs";
 import { buildCapabilityDocs } from "./capability-docs.mjs";
 import { routeHybrid } from "./hybrid-router.mjs";
+import { explainRoute } from "./route-entry.mjs";
 import { loadConfig } from "./config.mjs";
 import { CONNECTOR_TARGETS, targetsForHost } from "./connector-targets.mjs";
 import { HOOK_TARGETS, hookTargetForHost } from "./hook-targets.mjs";
 import { blockForVariant } from "../adapters/instructions/generate.mjs";
+import { installEntries } from "../scripts/load.mjs";
+import { discoverAgents, discoverCommands, discoverSkillsFromDirs } from "./discover.mjs";
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 const CONFIG = loadConfig();
+
+function tempRoot(prefix = "harness-router-") {
+  return mkdtempSync(join(tmpdir(), prefix));
+}
 
 // Curated-only (discover: false) tests exercise recipe.yaml + scorer logic
 // in isolation — deterministic, no dependency on what happens to be
@@ -39,6 +49,134 @@ test("route: relevant prompt returns the matching entry, not others", async () =
   const result = route(index, "how do I extract a table from this pdf", CONFIG);
   assert.ok(result.length >= 1);
   assert.equal(result[0].id, "pdf");
+  assert.equal(result[0].tier, "required");
+  assert.equal(result[0].action, "read_skill");
+});
+
+test("explainRoute: returns actionable results plus structured route metadata", async () => {
+  const index = await buildIndex("recipe.yaml", { discover: false });
+  const result = explainRoute(index, "how do I extract a table from this pdf", CONFIG);
+  assert.equal(result.status, "success");
+  assert.equal(result.results[0].id, "pdf");
+  assert.equal(result.results[0].tier, "required");
+  assert.equal(result.negative_evidence, null);
+  assert.ok(Number.isInteger(result.latency_ms));
+});
+
+test("explainRoute: empty result includes negative evidence", async () => {
+  const index = await buildIndex("recipe.yaml", { discover: false });
+  const result = explainRoute(index, "what's the capital of France", CONFIG);
+  assert.equal(result.status, "empty");
+  assert.deepEqual(result.results, []);
+  assert.equal(result.negative_evidence.result, "empty");
+  assert.match(result.negative_evidence.reason, /threshold|weak|keyword/i);
+});
+
+test("curated aliases: harness audit routes to workspace surface audit", async () => {
+  const index = await buildIndex("recipe.yaml", { discover: false });
+  const result = explainRoute(index, "audit connector hook find bugs in harness config", CONFIG);
+  assert.equal(result.results[0].id, "workspace-surface-audit");
+  assert.equal(result.results[0].action, "read_skill");
+});
+
+test("curated aliases: fix-test-commit routes to review and verification", async () => {
+  const index = await buildIndex("recipe.yaml", { discover: false });
+  const result = explainRoute(index, "fix bug run tests and commit after code review", CONFIG);
+  const ids = result.results.map((hit) => hit.id);
+  assert.equal(ids[0], "code-review");
+  assert.ok(ids.includes("verification-loop"));
+});
+
+test("curated aliases: settings hook repair routes to configure-ecc", async () => {
+  const index = await buildIndex("recipe.yaml", { discover: false });
+  const result = explainRoute(index, "fix settings.json hook for Claude Code config", CONFIG);
+  assert.equal(result.results[0].id, "configure-ecc");
+  assert.equal(result.results[0].action, "read_skill");
+});
+
+test("route-only entries are skipped by the loader", () => {
+  const result = installEntries([{ id: "alias-only", type: "skill", source: "missing", install: false }], {
+    mcpHosts: ["codex"],
+    skillHosts: ["codex"],
+  });
+  assert.deepEqual(result, [{ id: "alias-only", ok: true, skipped: true }]);
+});
+
+test("discovery: filesystem scan includes nested Claude plugin cache skills", () => {
+  const root = tempRoot();
+  try {
+    const skillDir = join(root, ".claude", "plugins", "cache", "ecc", "ecc", "2.0.0", ".agents", "skills", "nested-skill");
+    mkdirSync(skillDir, { recursive: true });
+    writeFileSync(
+      join(skillDir, "SKILL.md"),
+      '---\nname: nested-plugin-skill\ndescription: Skill from Claude plugin cache\n---\n# Nested\n',
+    );
+    const skills = discoverSkillsFromDirs([join(root, ".claude", "plugins", "cache")]);
+    assert.deepEqual(skills, [
+      {
+        name: "nested-plugin-skill",
+        description: "Skill from Claude plugin cache",
+        path: skillDir,
+      },
+    ]);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("discovery: filesystem scan includes nested plugin commands", () => {
+  const root = tempRoot();
+  try {
+    const commandDir = join(root, ".claude", "plugins", "cache", "ecc", "ecc", "2.0.0", "commands");
+    mkdirSync(commandDir, { recursive: true });
+    const commandPath = join(commandDir, "harness-audit.md");
+    writeFileSync(commandPath, "---\ndescription: Run a deterministic harness audit.\n---\n# Harness Audit\n");
+    const commands = discoverCommands([join(root, ".claude", "plugins", "cache")]);
+    assert.deepEqual(commands.map((command) => ({
+      id: command.id,
+      type: command.type,
+      path: command.path,
+      kindTrigger: command.route.triggers.includes("/harness-audit"),
+    })), [
+      {
+        id: "harness-audit",
+        type: "command",
+        path: commandPath,
+        kindTrigger: true,
+      },
+    ]);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("discovery: filesystem scan includes nested plugin agents", () => {
+  const root = tempRoot();
+  try {
+    const agentDir = join(root, ".claude", "plugins", "cache", "ecc", "ecc", "2.0.0", "agents");
+    mkdirSync(agentDir, { recursive: true });
+    const agentPath = join(agentDir, "harness-optimizer.md");
+    writeFileSync(
+      agentPath,
+      "---\nname: harness-optimizer\ndescription: Analyze and improve local agent harness configuration.\n---\n# Agent\n",
+    );
+    const agents = discoverAgents([join(root, ".claude", "plugins", "cache")]);
+    assert.deepEqual(agents.map((agent) => ({
+      id: agent.id,
+      type: agent.type,
+      path: agent.path,
+      description: agent.route.description,
+    })), [
+      {
+        id: "harness-optimizer",
+        type: "agent",
+        path: agentPath,
+        description: "Analyze and improve local agent harness configuration.",
+      },
+    ]);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });
 
 test("malformed route block is rejected", async () => {
@@ -103,6 +241,30 @@ test("hybrid: token sequence matching does not match inside longer words", () =>
     k: 5,
   });
   assert.deepEqual(result, []);
+});
+
+test("hybrid: broad vocabulary matches are suppressed as keyword-only noise", () => {
+  const index = {
+    entries: [
+      {
+        id: "vue-patterns",
+        type: "skill",
+        origin: "auto:skill",
+        path: "/skills/vue-patterns",
+        route: {
+          triggers: ["vue-patterns"],
+          description: "Vue.js component architecture patterns",
+        },
+      },
+    ],
+  };
+  const result = routeHybrid(index, "router architecture", {
+    hybridThreshold: 0.01,
+    includeWeak: true,
+    k: 5,
+  });
+  assert.equal(result[0].tier, "irrelevant_but_keyword_matched");
+  assert.equal(result[0].action, "ignore_by_default");
 });
 
 test("hybrid: suggest filters split skills from tools", () => {

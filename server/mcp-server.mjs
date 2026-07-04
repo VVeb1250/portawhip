@@ -10,9 +10,9 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { z } from "zod";
 import { loadIndex } from "../core/registry.mjs";
 import { listAll } from "../core/scorer.mjs";
-import { runRoute } from "../core/route-entry.mjs";
+import { explainRoute } from "../core/route-entry.mjs";
 import { loadConfig } from "../core/config.mjs";
-import { computeFactors } from "../core/feedback.mjs";
+import { computeFactors, logEvent } from "../core/feedback.mjs";
 import { readActiveSelection, resolveRecipePaths } from "../core/bundle-state.mjs";
 
 // This server is registered globally (add-mcp may promote project scope to
@@ -45,7 +45,17 @@ server.tool(
     const graphPath =
       config.graphPath && !isAbsolute(config.graphPath) ? join(ROOT, config.graphPath) : config.graphPath;
     const factors = computeFactors(ROOT);
-    const result = runRoute(index, query, { ...config, graphPath, k: k ?? config.k, factors });
+    const result = explainRoute(index, query, { ...config, graphPath, k: k ?? config.k, factors });
+    logEvent(ROOT, {
+      type: "route",
+      engine: config.engine,
+      queryLength: query.length,
+      resultCount: result.results.length,
+      suppressedCount: result.suppressed.length,
+      topIds: result.results.slice(0, 3).map((hit) => hit.id),
+      latencyMs: result.latency_ms,
+      emptyReason: result.negative_evidence?.reason ?? null,
+    });
     return { content: [{ type: "text", text: JSON.stringify(result) }] };
   },
 );

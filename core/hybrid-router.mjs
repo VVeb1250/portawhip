@@ -4,13 +4,77 @@ import { capabilityKind, matchesSuggestKind } from "./capability-kind.mjs";
 import { reciprocalRankFusion } from "./fusion.mjs";
 import { sparseRetrieve } from "./sparse-retriever.mjs";
 
-function formatResult(item) {
+const BROAD_TERMS = new Set([
+  "agent",
+  "architecture",
+  "automation",
+  "build",
+  "code",
+  "coding",
+  "context",
+  "debug",
+  "design",
+  "develop",
+  "engineering",
+  "framework",
+  "hook",
+  "implement",
+  "integration",
+  "pattern",
+  "project",
+  "route",
+  "router",
+  "skill",
+  "test",
+  "tool",
+  "workflow",
+]);
+
+function compactReason(item) {
+  const terms = (item.terms ?? []).slice(0, 5);
+  if (item.graphBoosted) {
+    return `graph-related to ${item.graphSource}`;
+  }
+  if (terms.length > 0) {
+    return `matched ${terms.join(", ")} in ${Object.keys(item.match ?? {}).slice(0, 3).join(", ") || "capability text"}`;
+  }
+  return "matched capability text";
+}
+
+function classifyCandidate(item, bar) {
+  const score = item.score ?? item.rrfScore ?? 0;
+  const confidence = bar > 0 ? Math.min(1, score / bar) : 1;
+  const terms = item.terms ?? [];
+  const specificTerms = terms.filter((term) => !BROAD_TERMS.has(term));
+  const weakKeywordOnly = terms.length > 0 && specificTerms.length === 0 && item.doc?.origin !== "recipe";
+
+  if (score >= bar && !weakKeywordOnly) {
+    return {
+      tier: confidence >= 1 && item.doc?.origin === "recipe" ? "required" : "recommended",
+      confidence,
+      action: item.doc?.action ?? (item.doc?.type === "skill" ? "read_skill" : "use_capability"),
+    };
+  }
+
+  return {
+    tier: weakKeywordOnly ? "irrelevant_but_keyword_matched" : "weak_match",
+    confidence,
+    action: "ignore_by_default",
+  };
+}
+
+function formatResult(item, bar) {
   const doc = item.doc;
+  const classification = classifyCandidate(item, bar);
   return {
     id: doc.id,
     type: doc.type,
     kind: capabilityKind(doc.type),
     score: Number((item.score ?? item.rrfScore ?? 0).toFixed(4)),
+    tier: classification.tier,
+    confidence: Number(classification.confidence.toFixed(2)),
+    why: compactReason(item),
+    action: classification.action,
     how_to_use: doc.description,
     pointer: doc.pointer,
     origin: doc.origin,
@@ -36,6 +100,7 @@ export function routeHybrid(
     k = 5,
     suggest = "any",
     factors = null,
+    includeWeak = false,
   } = {},
 ) {
   const docs = buildCapabilityDocs(index);
@@ -68,15 +133,33 @@ export function routeHybrid(
     ...candidate,
     score: candidate.score * (factors?.get(candidate.doc.id) ?? 1.0),
   }));
-  const filtered = expanded.filter((candidate) => {
+  const candidates = expanded
+    .filter((candidate) => matchesSuggestKind(candidate.doc.type, suggest))
+    .map((candidate) => {
+      const isTool = candidate.doc.type === "mcp" || candidate.doc.type === "cli";
+      const bar = candidate.doc.origin === "recipe" ? recipeBar : isTool ? toolBar : autoBar;
+      return { ...candidate, bar };
+    });
+  const filtered = candidates.filter((candidate) => {
     const isTool = candidate.doc.type === "mcp" || candidate.doc.type === "cli";
     const bar = candidate.doc.origin === "recipe" ? recipeBar : isTool ? toolBar : autoBar;
-    return candidate.score >= bar && matchesSuggestKind(candidate.doc.type, suggest);
+    return candidate.score >= bar && classifyCandidate(candidate, bar).tier !== "irrelevant_but_keyword_matched";
   });
-  if (filtered.length === 0) return [];
+  if (filtered.length === 0) {
+    if (!includeWeak) return [];
+    return candidates.slice(0, k).map((candidate) => formatResult(candidate, candidate.bar));
+  }
 
   // Phase 2.5 starts with one retrieval channel. Keeping fusion in the path
   // makes dense embeddings and bounded graph expansion additive later.
   const fused = reciprocalRankFusion([filtered]).slice(0, k);
-  return fused.map(formatResult);
+  const routed = fused.map((item) => formatResult(item, item.bar));
+  if (!includeWeak || routed.length >= k) return routed;
+
+  const routedIds = new Set(routed.map((item) => item.id));
+  const weak = candidates
+    .filter((candidate) => !routedIds.has(candidate.doc.id))
+    .slice(0, k - routed.length)
+    .map((candidate) => formatResult(candidate, candidate.bar));
+  return [...routed, ...weak];
 }

@@ -58,8 +58,104 @@
 - id: harness-router
   type: mcp
   source: node
+  path: "."
   args: ["server/mcp-server.mjs"]
   name: harness-router
   scope: project
-  # No route: block on purpose — this is the router itself (meta capability),
-  # not something to route *to*. Installable via the loader, never pushed.
+  route:
+    triggers:
+      [
+        "harness-router",
+        "portawhip",
+        "route precision",
+        "routing telemetry",
+        "capability router",
+        "router architecture",
+      ]
+    description: "Inspect or improve this repo's harness-router/portawhip routing source"
+    when: [user_prompt]
+    inject: hint
+    action: inspect_code
+
+- id: workspace-surface-audit
+  type: skill
+  source: workspace-surface-audit
+  install: false
+  route:
+    triggers:
+      [
+        "ecc:harness-audit",
+        "harness audit",
+        "audit connector",
+        "audit hook",
+        "connector audit",
+        "hook audit",
+        "mcp audit",
+        "workspace surface audit",
+        "harness surface",
+      ]
+    description: "Audit the active repo, MCP servers, connectors, hooks, plugins, and ECC harness surface"
+    when: [user_prompt]
+    inject: hint
+    action: read_skill
+
+- id: configure-ecc
+  type: skill
+  source: configure-ecc
+  install: false
+  route:
+    triggers:
+      [
+        "update-config",
+        "update config",
+        "settings.json hook",
+        "claude code settings",
+        "codex config",
+        "mcp config",
+        "configure ecc",
+        "hook troubleshooting",
+        "fix config",
+      ]
+    description: "Configure or repair ECC/Codex/Claude harness config, hooks, settings, and MCP wiring"
+    when: [user_prompt]
+    inject: hint
+    action: read_skill
+
+- id: verification-loop
+  type: skill
+  source: verification-loop
+  install: false
+  route:
+    triggers:
+      [
+        "verify",
+        "verification",
+        "run tests",
+        "test before commit",
+        "pre commit verification",
+        "quality gate",
+        "fix bug and run tests",
+      ]
+    description: "Run build/test/lint/security verification after code changes and before commits"
+    when: [user_prompt]
+    inject: hint
+    action: read_skill
+
+- id: code-review
+  type: skill
+  source: code-review
+  install: false
+  route:
+    triggers:
+      [
+        "code-review",
+        "code review",
+        "review changed code",
+        "review before commit",
+        "bug fix review",
+        "pull request review",
+      ]
+    description: "Review changed code for bugs, regressions, missing tests, and maintainability before commit"
+    when: [user_prompt]
+    inject: hint
+    action: review_code
