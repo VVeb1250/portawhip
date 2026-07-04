@@ -8,3 +8,11 @@ foundry:
 roles:
   secure:
     description: "Deterministic supply-chain/secret checks (0-MCP). Pick this if your role touches dependencies, CI, or handles credentials."
+  coding:
+    description: "Code-size orientation and perf verification (0-MCP). Pick this if you write/refactor code day to day."
+  research:
+    description: "Document format conversion (0-MCP). Pick this if you work with docs, papers, or notes across formats."
+  frontend:
+    description: "JS/TS/JSON lint and format (0-MCP). Pick this if your role touches frontend or Node code."
+  backend-data:
+    description: "Query CSV/Parquet/SQLite/JSON without loading them into context (0-MCP). Pick this if your role touches data files or APIs returning JSON."

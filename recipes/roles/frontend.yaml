@@ -1,0 +1,14 @@
+# Role: frontend - opt-in via `node scripts/bundles.mjs select --role frontend`.
+# biome is a single-binary linter+formatter for JS/TS/JSON (fast, no Node
+# toolchain dependency at the binary level). mise registry name re-verified
+# live in this repo on 2026-07-05 (`mise registry`: biome ->
+# aqua:biomejs/biome npm:@biomejs/biome).
+- id: biome
+  type: cli
+  source: biome
+  route:
+    triggers: ["lint javascript", "biome", "format typescript", "lint frontend code", "js formatter"]
+    description: "Lint and format JS/TS/JSON (fast, single binary)"
+    when: [user_prompt]
+    inject: hint
+    binary: biome

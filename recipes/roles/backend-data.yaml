@@ -1,0 +1,26 @@
+# Role: backend-data - opt-in via
+# `node scripts/bundles.mjs select --role backend-data`.
+# duckdb + jq are carried over from the predecessor project's already
+# bench-proven data-query set (docs/BUNDLE.md: "+99.96% vs Read" for bulk
+# CSV/Parquet/SQLite/JSON queries, 0 MCP). Both mise registry names
+# re-verified live in this repo on 2026-07-05 (`mise registry`: duckdb ->
+# aqua:duckdb/duckdb, jq -> aqua:jqlang/jq).
+- id: duckdb
+  type: cli
+  source: duckdb
+  route:
+    triggers: ["query csv", "duckdb", "query parquet", "sql on files", "analyze large dataset"]
+    description: "Run SQL directly over CSV/Parquet/SQLite/JSON files without loading them into context"
+    when: [user_prompt]
+    inject: hint
+    binary: duckdb
+
+- id: jq
+  type: cli
+  source: jq
+  route:
+    triggers: ["parse json", "jq", "filter json", "transform json", "query json file"]
+    description: "Slice, filter, and transform JSON from the command line"
+    when: [user_prompt]
+    inject: hint
+    binary: jq

@@ -1,0 +1,14 @@
+# Role: research - opt-in via `node scripts/bundles.mjs select --role research`.
+# pandoc handles the common research friction of converting between document
+# formats (docs/papers/notes) without a heavyweight app. mise registry name
+# re-verified live in this repo on 2026-07-05 (`mise registry`: pandoc ->
+# github:jgm/pandoc).
+- id: pandoc
+  type: cli
+  source: pandoc
+  route:
+    triggers: ["convert document", "pandoc", "markdown to pdf", "docx to markdown", "document format conversion"]
+    description: "Convert between document formats (markdown, docx, pdf, html, and more)"
+    when: [user_prompt]
+    inject: hint
+    binary: pandoc

@@ -1,0 +1,26 @@
+# Role: coding - opt-in via `node scripts/bundles.mjs select --role coding`.
+# ast-grep (structural search/rewrite) already lives in foundry, so this
+# role covers what foundry doesn't: perf verification while coding.
+#
+# tokei (LOC counter) was tried and dropped live on 2026-07-05: mise's
+# registry only offers it via a cargo build (`cargo:tokei`) or an aqua entry
+# that itself refuses non-binary cargo packages ("package type cargo is not
+# supported in the aqua backend") - no prebuilt binary path on this
+# platform. That's compile-tax, the same class of problem that got
+# `headroom-ai` rejected from the predecessor project's bundle (see
+# E:\portable-harness\docs\BUNDLE.md: "= compile-tax ทุก host ... ขัด North
+# Star portable"). Not forcing a Rust toolchain install for one bundle tool.
+# No prebuilt-binary LOC-counter alternative (scc, cloc) was found in mise's
+# registry either - open gap, not silently worked around.
+#
+# hyperfine's mise registry name re-verified live on 2026-07-05
+# (`mise registry`: hyperfine -> aqua:sharkdp/hyperfine cargo:hyperfine).
+- id: hyperfine
+  type: cli
+  source: hyperfine
+  route:
+    triggers: ["benchmark command", "hyperfine", "compare performance", "measure runtime", "how fast is this"]
+    description: "Command-line benchmarking with statistically sound comparisons"
+    when: [user_prompt]
+    inject: hint
+    binary: hyperfine

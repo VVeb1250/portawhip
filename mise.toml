@@ -1,4 +1,9 @@
 [tools]
 ast-grep = "latest"
+biome = "latest"
+duckdb = "latest"
 gitleaks = "latest"
+hyperfine = "latest"
+jq = "latest"
 osv-scanner = "latest"
+pandoc = "latest"
