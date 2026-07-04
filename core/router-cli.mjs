@@ -9,6 +9,7 @@ import { compileCapabilityGraph, writeCapabilityGraph } from "./capability-graph
 import { runRouterEval, runRouterEvalComparison } from "./router-eval.mjs";
 import { loadConfig } from "./config.mjs";
 import { computeFactors } from "./feedback.mjs";
+import { readActiveSelection, resolveRecipePaths } from "./bundle-state.mjs";
 import { dirname, resolve } from "node:path";
 
 function parseArgs(argv) {
@@ -27,7 +28,14 @@ function parseArgs(argv) {
 async function main() {
   const [, , command, ...rest] = process.argv;
   const args = parseArgs(rest);
-  const index = await loadIndex(args.recipe ?? "recipe.yaml", { discover: !args["no-discover"] });
+  // --recipe is an explicit override (bypasses the opt-in bundle layer
+  // entirely) so existing single-recipe usage and tests are unaffected.
+  // Otherwise resolve whatever bundles the user has opted into via
+  // scripts/bundles.mjs select, defaulting to just this project's
+  // recipe.yaml when nothing has been selected (today's exact behavior).
+  const recipePaths = args.recipe ?? resolveRecipePaths(process.cwd(), readActiveSelection(process.cwd()));
+  const primaryRecipe = Array.isArray(recipePaths) ? recipePaths[recipePaths.length - 1] : recipePaths;
+  const index = await loadIndex(recipePaths, { discover: !args["no-discover"] });
 
   if (command === "route") {
     if (!args.prompt) {
@@ -46,7 +54,7 @@ async function main() {
       graphBoost: args.graphBoost ? Number(args.graphBoost) : config.graphBoost,
       suggest: args.suggest ?? "any",
       k: args.k ? Number(args.k) : config.k,
-      factors: computeFactors(dirname(resolve(args.recipe ?? "recipe.yaml"))),
+      factors: computeFactors(dirname(resolve(primaryRecipe))),
     };
     const engine = args.engine ?? config.engine;
     const result = runRoute(index, args.prompt, { ...opts, engine });

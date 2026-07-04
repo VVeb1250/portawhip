@@ -4,11 +4,12 @@
 // logic and no host list — it only shells out to add-mcp / mise / asm
 // per entry.type, targeting whatever detectHosts() finds on THIS machine.
 
-import { readFileSync, existsSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import spawnSync from "cross-spawn";
-import yaml from "js-yaml";
 import { detectHosts } from "./hosts.mjs";
+import { mergeRawEntries } from "../core/registry.mjs";
+import { readActiveSelection, resolveRecipePaths } from "../core/bundle-state.mjs";
 
 function run(cmd, args) {
   console.log(`\n$ ${cmd} ${args.join(" ")}`);
@@ -59,9 +60,14 @@ function loadMcp(entry, hosts) {
   return false;
 }
 
-function loadCli(entry) {
+function loadCli(entry, hosts, scope) {
   // mise itself is the cross-OS layer here; no per-agent targeting needed.
-  return run("mise", ["use", "-g", entry.source]);
+  // scope:"project" pins the tool in THIS project's own .mise.toml (created/
+  // updated in the cwd mise is run from) instead of the user's global mise
+  // config — for a bundle role that's only relevant to one project, not
+  // every project on the machine.
+  const args = scope === "project" ? ["use", entry.source] : ["use", "-g", entry.source];
+  return run("mise", args);
 }
 
 function loadSkill(entry, hosts) {
@@ -81,14 +87,11 @@ function loadSkill(entry, hosts) {
 
 const DISPATCH = { mcp: loadMcp, cli: loadCli, skill: loadSkill };
 
-async function main() {
-  const recipePath = process.argv[2] ?? "recipe.yaml";
-  const entries = yaml.load(readFileSync(recipePath, "utf8"));
-  const hosts = await detectHosts();
-
-  console.log(`detected MCP hosts:   ${hosts.mcpHosts.join(", ") || "(none)"}`);
-  console.log(`detected skill hosts: ${hosts.skillHosts.join(", ") || "(none)"}`);
-
+// Extracted so scripts/bundles.mjs's `select` can install right after
+// recording a bundle choice, without duplicating this dispatch logic.
+// scope only affects type:cli entries (mise -g vs project .mise.toml);
+// mcp/skill handlers ignore the extra argument.
+export function installEntries(entries, hosts, scope = "global") {
   const results = [];
   for (const entry of entries) {
     const handler = DISPATCH[entry.type];
@@ -97,9 +100,29 @@ async function main() {
       results.push({ id: entry.id, ok: false });
       continue;
     }
-    const ok = handler(entry, hosts);
+    const ok = handler(entry, hosts, scope);
     results.push({ id: entry.id, ok });
   }
+  return results;
+}
+
+async function main() {
+  // An explicit path argument bypasses the opt-in bundle layer entirely
+  // (existing single-recipe usage, unchanged). Otherwise install whatever
+  // bundles were selected via scripts/bundles.mjs select, composed in front
+  // of this project's own recipe.yaml — defaults to just recipe.yaml when
+  // nothing has been selected (today's exact behavior).
+  const explicitRecipe = process.argv[2];
+  const recipePaths = explicitRecipe
+    ? [explicitRecipe]
+    : resolveRecipePaths(resolve("."), readActiveSelection(resolve(".")));
+  const entries = mergeRawEntries(recipePaths);
+  const hosts = await detectHosts();
+
+  console.log(`detected MCP hosts:   ${hosts.mcpHosts.join(", ") || "(none)"}`);
+  console.log(`detected skill hosts: ${hosts.skillHosts.join(", ") || "(none)"}`);
+
+  const results = installEntries(entries, hosts);
 
   console.log("\n== load summary ==");
   for (const r of results) console.log(`${r.ok ? "OK  " : "FAIL"} ${r.id}`);

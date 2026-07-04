@@ -1,0 +1,27 @@
+# Role: secure - opt-in via `node scripts/bundles.mjs select --role secure`
+# (combine with other roles: --role secure,coding).
+#
+# gitleaks + osv-scanner are carried over from the predecessor project's
+# already bench-proven secure-agent set (docs/BUNDLE.md: "tested PASS",
+# 0 MCP, deterministic). Both mise registry names were re-verified live in
+# this repo on 2026-07-05 (`mise registry`: gitleaks -> aqua:gitleaks/gitleaks,
+# osv-scanner -> aqua:google/osv-scanner).
+- id: gitleaks
+  type: cli
+  source: gitleaks
+  route:
+    triggers: ["secret scan", "gitleaks", "leaked credentials", "hardcoded secret", "api key in code"]
+    description: "Scan for hardcoded secrets/credentials before they get committed"
+    when: [user_prompt]
+    inject: hint
+    binary: gitleaks
+
+- id: osv-scanner
+  type: cli
+  source: osv-scanner
+  route:
+    triggers: ["vulnerability scan", "osv-scanner", "dependency vulnerabilities", "cve check", "supply chain"]
+    description: "Scan dependencies for known vulnerabilities (OSV database)"
+    when: [user_prompt]
+    inject: hint
+    binary: osv-scanner

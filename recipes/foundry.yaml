@@ -1,0 +1,27 @@
+# Foundry - whipforaweeb's recommended core bundle. Recommended, not forced:
+# `node scripts/bundles.mjs select --foundry` opts in, `select --none` opts
+# out at any time.
+#
+# Every entry here MUST carry a route: block. This is the rule that keeps
+# this bundle from repeating the predecessor project's own gripe: a set of
+# curated tools that installed cleanly but was never wired into behavior
+# ("bundle harness = bench harness, not production harness" -
+# E:\portable-harness\docs\BUNDLE.md section 7). Selecting a bundle here
+# writes the SAME recipe-file list that both scripts/load.mjs (install) and
+# the router/hooks (routing) read - so nothing in this file can end up
+# installed-then-silent.
+#
+# ast-grep is carried over from the predecessor project's already
+# bench-proven 0-tax core (docs/BUNDLE.md: "+69% precision/+76-97% codemod"
+# vs plain grep/sed on structural edits) and its mise registry name was
+# re-verified live in this repo on 2026-07-05 (`mise registry` lists
+# `ast-grep -> aqua:ast-grep/ast-grep`).
+- id: ast-grep
+  type: cli
+  source: ast-grep
+  route:
+    triggers: ["structural search", "ast-grep", "codemod", "rewrite code pattern", "syntax-aware search"]
+    description: "Structural, syntax-aware code search and rewrite (AST-based, not plain text)"
+    when: [user_prompt]
+    inject: hint
+    binary: ast-grep

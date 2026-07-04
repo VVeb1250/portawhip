@@ -1,0 +1,4 @@
+[tools]
+ast-grep = "latest"
+gitleaks = "latest"
+osv-scanner = "latest"

@@ -15,9 +15,13 @@ import { loadIndex, readCachedIndex } from "../../core/registry.mjs";
 import { runRoute } from "../../core/route-entry.mjs";
 import { loadConfig } from "../../core/config.mjs";
 import { computeFactors, logEvent, readEvents } from "../../core/feedback.mjs";
+import { readActiveSelection, resolveRecipePaths } from "../../core/bundle-state.mjs";
 
 const ROOT = dirname(dirname(dirname(fileURLToPath(import.meta.url))));
-const RECIPE_PATH = join(ROOT, "recipe.yaml");
+// Whatever bundles were opted into via `scripts/bundles.mjs select` (foundry
+// + roles), resolved in front of this repo's own recipe.yaml — defaults to
+// just recipe.yaml when nothing has been selected (today's behavior).
+const RECIPE_PATHS = resolveRecipePaths(ROOT, readActiveSelection(ROOT));
 const CONFIG_PATH = join(ROOT, "router.config.yaml");
 const MIN_PROMPT_LEN = 8;
 
@@ -121,7 +125,7 @@ async function userPrompt(payload, args) {
   if (prompt.length < MIN_PROMPT_LEN || prompt.startsWith("/")) return;
 
   const config = loadConfig(CONFIG_PATH);
-  const index = await loadIndex(RECIPE_PATH);
+  const index = await loadIndex(RECIPE_PATHS);
   const graphPath =
     config.graphPath && !isAbsolute(config.graphPath) ? join(ROOT, config.graphPath) : config.graphPath;
   const factors = computeFactors(ROOT);
@@ -146,7 +150,7 @@ function neverSuggested(root, id) {
 }
 
 async function postTool(payload, args) {
-  const index = readCachedIndex(RECIPE_PATH);
+  const index = readCachedIndex(RECIPE_PATHS);
   if (!index) return;
   const { toolName, toolInput } = toolFields(payload);
   const id = resolveId(index, toolName, toolInput);
@@ -158,7 +162,14 @@ async function postTool(payload, args) {
 
   const entry = index.entries.find((e) => e.id === id);
   if (!entry) return;
-  const nudge = `Note: "${toolName}" just did something \`${id}\` already covers - ${entry.how_to_use} - ${entry.pointer}. Prefer it next time.`;
+  // Raw index entries only carry route.description/path/source — how_to_use
+  // and pointer are fields scorer.mjs constructs for the FORMATTED route()
+  // output, not present here. Reading them off the raw entry silently
+  // produced "undefined - undefined" (found live 2026-07-05, first time a
+  // curated CLI entry with a `binary` field actually matched a Bash command).
+  const description = entry.route?.description ?? "";
+  const pointer = entry.path ?? entry.source ?? "";
+  const nudge = `Note: "${toolName}" just did something \`${id}\` already covers - ${description} - ${pointer}. Prefer it next time.`;
   process.stdout.write(JSON.stringify(outputAdditionalContext(args.host, args.nativeEvent, nudge)));
 }
 

@@ -1,0 +1,10 @@
+# Bundle catalog metadata (data only, no logic) — read by
+# `scripts/bundles.mjs list`/`status`. Every bundle here is opt-in; foundry
+# is only "recommended", never auto-installed or auto-selected (agreed
+# 2026-07-05: bundles recommend, they never force).
+foundry:
+  description: "whipforaweeb's recommended core - small, cross-OS, 0-MCP. Opt-out anytime with `bundles select --none`."
+  recommended: true
+roles:
+  secure:
+    description: "Deterministic supply-chain/secret checks (0-MCP). Pick this if your role touches dependencies, CI, or handles credentials."

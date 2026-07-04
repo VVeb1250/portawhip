@@ -13,13 +13,17 @@ import { listAll } from "../core/scorer.mjs";
 import { runRoute } from "../core/route-entry.mjs";
 import { loadConfig } from "../core/config.mjs";
 import { computeFactors } from "../core/feedback.mjs";
+import { readActiveSelection, resolveRecipePaths } from "../core/bundle-state.mjs";
 
 // This server is registered globally (add-mcp may promote project scope to
 // global depending on the host), so a caller can invoke it from ANY cwd —
 // recipe.yaml/router.config.yaml must resolve to this repo, never the
 // caller's working directory.
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
-const RECIPE_PATH = join(ROOT, "recipe.yaml");
+// Whatever bundles were opted into via `scripts/bundles.mjs select` (foundry
+// + roles), resolved in front of this repo's own recipe.yaml — defaults to
+// just recipe.yaml when nothing has been selected (today's behavior).
+const RECIPE_PATHS = resolveRecipePaths(ROOT, readActiveSelection(ROOT));
 const CONFIG_PATH = join(ROOT, "router.config.yaml");
 
 const server = new McpServer({ name: "harness-router", version: "0.0.1" });
@@ -31,7 +35,7 @@ server.tool(
     "Empty result is expected and means nothing relevant is installed.",
   { query: z.string(), k: z.number().optional() },
   async ({ query, k }) => {
-    const index = await loadIndex(RECIPE_PATH);
+    const index = await loadIndex(RECIPE_PATHS);
     const config = loadConfig(CONFIG_PATH);
     // Same class of bug fixed earlier for recipe.yaml/router.config.yaml:
     // graphPath in config is written as a repo-relative string, which
@@ -52,7 +56,7 @@ server.tool(
     "optionally filtered by type (mcp | cli | skill).",
   { type: z.string().optional() },
   async ({ type }) => {
-    const index = await loadIndex(RECIPE_PATH);
+    const index = await loadIndex(RECIPE_PATHS);
     const result = listAll(index, type);
     return { content: [{ type: "text", text: JSON.stringify(result) }] };
   },
