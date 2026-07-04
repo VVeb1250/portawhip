@@ -6,7 +6,7 @@
 // connector block into every known host instruction surface for a selected
 // scope (project by default, global when explicitly requested).
 
-import { existsSync, mkdirSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync, rmSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { listInstalledServers } from "add-mcp";
 import { detectHosts } from "./hosts.mjs";
@@ -71,8 +71,29 @@ async function mcpLinkedByHost(hostIds) {
   return linked;
 }
 
+// A dedicated, harness-owned rule file (cursor .mdc, windsurf .md) carries
+// frontmatter BEFORE the marker block, so marker-upsert is wrong for it:
+// upsertBlock preserves the pre-marker preamble AND re-adds the block's own
+// preamble, duplicating the frontmatter on every re-run. Own the whole file
+// instead — install writes it verbatim (idempotent), remove deletes it (no
+// orphan always-on rule left behind on uninstall).
+function applyOwnedTarget(command, target) {
+  if (command === "remove") {
+    if (!existsSync(target.path)) return { changed: false, linked: false };
+    rmSync(target.path);
+    return { changed: true, linked: false };
+  }
+  mkdirSync(dirname(target.path), { recursive: true });
+  const next = `${blockForVariant(target.variant)}\n`;
+  const current = existsSync(target.path) ? readFileSync(target.path, "utf8") : null;
+  const changed = current !== next;
+  if (changed) writeFileSync(target.path, next);
+  return { changed, linked: true };
+}
+
 export function applyTarget(command, target) {
   if (command === "status") return { changed: false, linked: hasHarnessBlock(target.path) };
+  if (target.owned) return applyOwnedTarget(command, target);
   mkdirSync(dirname(target.path), { recursive: true });
   const changed =
     command === "install" ? upsertBlock(target.path, blockForVariant(target.variant)) : removeBlock(target.path);

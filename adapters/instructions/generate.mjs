@@ -37,11 +37,23 @@ alwaysApply: true
 
 ${GENERIC_BLOCK}`;
 
+// Windsurf workspace rules live under .windsurf/rules/*.md and pick an
+// activation mode via the `trigger` frontmatter field; always_on = injected
+// into every request in the workspace. This is a dedicated harness-owned
+// file (see owned:true in connector-targets), so it is written whole, not
+// marker-upserted — the frontmatter must stay the first bytes of the file.
+export const WINDSURF_RULE_BLOCK = `---
+trigger: always_on
+---
+
+${GENERIC_BLOCK}`;
+
 export const BLOCK = GENERIC_BLOCK;
 
 export function blockForVariant(variant = "generic") {
   if (variant === "claude-code") return CLAUDE_CODE_BLOCK;
   if (variant === "cursor-rule") return CURSOR_RULE_BLOCK;
+  if (variant === "windsurf-rule") return WINDSURF_RULE_BLOCK;
   return GENERIC_BLOCK;
 }
 

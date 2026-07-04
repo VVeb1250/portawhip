@@ -106,4 +106,10 @@ async function main() {
   process.exitCode = results.every((r) => r.ok) ? 0 : 1;
 }
 
-main();
+import { pathToFileURL } from "node:url";
+
+// Guard main() behind an entry-point check (matches link-hooks/link-connectors/
+// generate) so importing this module never triggers a real install as a side
+// effect of module load.
+const isMain = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
+if (isMain) main();

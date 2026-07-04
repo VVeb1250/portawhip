@@ -187,12 +187,18 @@ a Mac or Linux box.
 ## How to sanity-check anything in this repo yourself
 
 ```bash
-npm test                      # 39 unit/integration tests, ~5s
+npm test                      # unit/integration tests, ~5s
 npm run route:eval            # live eval against docs/router-eval-set.jsonl
 npm run route:compare         # keyword vs hybrid engine side by side
-npm run route -- --prompt "..."           # try any prompt against the live config
-node scripts/install-push-hook.mjs status # what's actually installed right now
+npm run route -- --prompt "..."              # try any prompt against the live config
+node scripts/doctor.mjs                       # unified status across all backends + per-host detail
+node scripts/link-hooks.mjs status --scope global      # native hooks, per host
+node scripts/link-connectors.mjs status --scope global # instruction connectors, per host
 ```
+
+> Note: the old `scripts/install-push-hook.mjs` was deleted (superseded by
+> `universal-hook.mjs` + `link-hooks.mjs`); use the `doctor` / `link-*` status
+> commands above instead.
 
 If a doc's claimed result and a fresh run disagree, trust the fresh run —
 docs decay, live checks don't.
