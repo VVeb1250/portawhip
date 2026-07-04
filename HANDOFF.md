@@ -5,6 +5,50 @@ changes when direction changes) → `PLAN.md` (phase roadmap) → the
 `docs/phase*-verify*.md` files (what was actually proven, with commands to
 re-check it yourself).
 
+## Published (2026-07-04, later same day)
+
+Repo is live at **https://github.com/VVeb1250/portawhip** (public, MIT
+license, topics: mcp/mcp-server/ai-agents/agent-tools/developer-tools/
+claude-code/cli/nodejs/context-management/tool-router). `package.json`
+renamed `portable-harness-v2` → `portawhip` to match. The old predecessor
+repo `VVeb1250/portable-harness` (v1, diagnosed broken — see VISION.md §0)
+was flipped from public to private to avoid confusion with this one; its
+own archives (`port-a-whip-archive`, `-V3`) were already private,
+untouched. Secret-scanned twice (pre- and post-visibility-flip) — no
+tokens/keys found, only the intentional copyright name in `LICENSE`/
+`package.json`.
+
+## Known open gap, not yet decided (2026-07-04) — auto-discovered CLI entries have zero "made for agent" vetting
+
+`core/discover.mjs`'s `discoverCli()` turns **every** mise-tracked CLI tool
+on the machine into a routable capability — trigger is just the bare tool
+name, description is the literal string `"CLI tool: <name>"`. No signal
+anywhere distinguishes "built/documented for non-interactive agent use"
+from "some unrelated dev tool the user happens to have installed" — no
+such metadata exists in mise or anywhere else industry-wide, so this
+can't be solved by reading better metadata.
+
+Two distinct risks this raises, deliberately not conflated:
+- **Security**: low. The router only ever emits a text suggestion into
+  context — it does not execute anything. Actually running a suggested
+  CLI still goes through the host's own permission gate (e.g. Bash tool
+  approval). A bad suggestion costs context/noise, not an unsafe action.
+- **Functional**: real but currently latent. An interactive-only CLI
+  (waits on stdin, no `--json`/non-interactive mode) could hang if an
+  agent trusted "CLI tool: X" enough to invoke it non-interactively. Only
+  1 CLI is currently auto-discovered on this machine (`ripgrep`, which is
+  also curated), so this hasn't bitten yet — but it will as soon as more
+  mise-tracked tools exist here.
+
+Discussed options, **none implemented yet, no decision made**:
+- Exclude `origin: "auto:cli"` entries from routing entirely (still show
+  in `list_all`), require promotion to a curated `recipe.yaml` entry
+  (human review) before an auto-discovered CLI becomes suggestible —
+  mirrors the `pdf`/`codegraph` curated-override pattern already in use.
+  Leaning direction, not committed.
+- User's own framing: "ค่อนข้างปัญหาโลกแตก" (open-ended problem) —
+  explicitly deferred, come back to it later rather than force a fix now.
+
 ## Where things actually stand (2026-07-04, end of session)
 
 All 4 PLAN.md phases are now built and locally verified:
