@@ -1,9 +1,16 @@
-import { test } from "node:test";
+import { test, after } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync, rmSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { installJsonHooks, removeJsonHooks, statusJsonHooks } from "./link-hooks.mjs";
+import { join, resolve } from "node:path";
+
+// Must be set before link-hooks.mjs is imported (STUB_HOME is read once at
+// module load) so ensureStub() never touches the real home directory.
+const stubHome = mkdtempSync(join(tmpdir(), "harness-stub-home-"));
+process.env.HARNESS_ROUTER_STUB_HOME = stubHome;
+after(() => rmSync(stubHome, { recursive: true, force: true }));
+
+const { installJsonHooks, removeJsonHooks, statusJsonHooks } = await import("./link-hooks.mjs");
 
 function fakeTarget(path, overrides = {}) {
   return {
@@ -24,6 +31,27 @@ test("link-hooks: install writes a hook containing the universal-hook marker", (
     const config = JSON.parse(readFileSync(path, "utf8"));
     assert.ok(config.hooks.UserPromptSubmit[0].hooks[0].command.includes("universal-hook.mjs"));
     assert.ok(config.hooks.PostToolUse[0].hooks[0].command.includes("universal-hook.mjs"));
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("link-hooks: install routes the command through the outside-repo stub, not the repo file directly", () => {
+  const dir = mkdtempSync(join(tmpdir(), "harness-hooks-"));
+  const path = join(dir, "settings.json");
+  try {
+    const target = fakeTarget(path);
+    installJsonHooks("test-host", target);
+    const config = JSON.parse(readFileSync(path, "utf8"));
+    const command = config.hooks.UserPromptSubmit[0].hooks[0].command;
+
+    const stubPath = resolve(stubHome, ".harness-router", "hook-stub.mjs");
+    assert.ok(command.includes(stubPath), "command should invoke the stub path");
+    assert.ok(command.includes("--target"), "command should pass the real runner via --target");
+
+    const stubContent = readFileSync(stubPath, "utf8");
+    const sourceContent = readFileSync(resolve("adapters", "hooks", "hook-stub.mjs"), "utf8");
+    assert.equal(stubContent, sourceContent);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

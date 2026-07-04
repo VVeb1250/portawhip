@@ -14,7 +14,7 @@ import { dirname, join, isAbsolute } from "node:path";
 import { loadIndex, readCachedIndex } from "../../core/registry.mjs";
 import { runRoute } from "../../core/route-entry.mjs";
 import { loadConfig } from "../../core/config.mjs";
-import { computeFactors, logEvent } from "../../core/feedback.mjs";
+import { computeFactors, logEvent, readEvents } from "../../core/feedback.mjs";
 
 const ROOT = dirname(dirname(dirname(fileURLToPath(import.meta.url))));
 const RECIPE_PATH = join(ROOT, "recipe.yaml");
@@ -138,13 +138,28 @@ async function userPrompt(payload, args) {
   process.stdout.write(JSON.stringify(outputAdditionalContext(args.host, args.nativeEvent, block)));
 }
 
-async function postTool(payload) {
+// Soft nudge only — hooks must stay fail-open (see main()'s catch below), so
+// this never blocks the tool call that already ran. It just tells the model
+// a harness capability covers what it just did by hand, for next time.
+function neverSuggested(root, id) {
+  return !readEvents(root).some((e) => e.type === "suggested" && e.id === id);
+}
+
+async function postTool(payload, args) {
   const index = readCachedIndex(RECIPE_PATH);
   if (!index) return;
   const { toolName, toolInput } = toolFields(payload);
   const id = resolveId(index, toolName, toolInput);
   if (!id) return;
+
+  const wasIgnored = neverSuggested(ROOT, id);
   logEvent(ROOT, { type: "used", id, tool: toolName, sessionId: payload.session_id ?? null });
+  if (!wasIgnored) return;
+
+  const entry = index.entries.find((e) => e.id === id);
+  if (!entry) return;
+  const nudge = `Note: "${toolName}" just did something \`${id}\` already covers - ${entry.how_to_use} - ${entry.pointer}. Prefer it next time.`;
+  process.stdout.write(JSON.stringify(outputAdditionalContext(args.host, args.nativeEvent, nudge)));
 }
 
 async function main() {

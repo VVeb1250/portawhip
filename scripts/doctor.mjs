@@ -41,17 +41,45 @@ function checkRouter() {
   return { label: "router registry (recipe + live discovery)", ok: r.ok && Array.isArray(entries) && entries.length > 0 };
 }
 
-function checkHooks() {
-  const r = capture(process.execPath, ["scripts/link-hooks.mjs", "status", "--scope", "global"]);
-  return { label: "native hooks (link-hooks.mjs, global scope)", ok: r.ok };
+// Both scopes, not just global — collapsing to one bool at global scope hid
+// per-host detail that link-hooks.mjs/link-connectors.mjs status already
+// print (path + linked/missing per host). Doctor's job is to surface that,
+// not re-summarize it into a single OK/FAIL.
+function checkHooks(scope) {
+  const r = capture(process.execPath, ["scripts/link-hooks.mjs", "status", "--scope", scope]);
+  return { label: `native hooks (link-hooks.mjs, ${scope} scope)`, ok: r.ok, detail: r.output.trim() };
 }
 
-function checkConnectors() {
-  const r = capture(process.execPath, ["scripts/link-connectors.mjs", "status", "--scope", "global"]);
-  return { label: "instruction connectors (link-connectors.mjs, global scope)", ok: r.ok };
+function checkConnectors(scope) {
+  const r = capture(process.execPath, ["scripts/link-connectors.mjs", "status", "--scope", scope]);
+  return { label: `instruction connectors (link-connectors.mjs, ${scope} scope)`, ok: r.ok, detail: r.output.trim() };
 }
 
-const checks = [checkMcp(), checkCli(), checkSkill(), checkRouter(), checkHooks(), checkConnectors()];
+const checks = [
+  checkMcp(),
+  checkCli(),
+  checkSkill(),
+  checkRouter(),
+  checkHooks("project"),
+  checkHooks("global"),
+  checkConnectors("project"),
+  checkConnectors("global"),
+];
+
 console.log("\n== doctor: unified status ==");
 for (const c of checks) console.log(`${c.ok ? "OK  " : "FAIL"} ${c.label}`);
+
+console.log("\n== per-host detail (source of truth for what's loaded where) ==");
+for (const c of checks) {
+  if (!c.detail) continue;
+  console.log(`\n--- ${c.label} ---`);
+  console.log(c.detail);
+}
+
+console.log(
+  "\nNote: add-mcp / agent-skill-manager entries are managed by those tools, not by\n" +
+    "this harness. `doctor` reports on them but `scripts/uninstall-all.mjs` cannot\n" +
+    "remove them — use each tool's own uninstall if you want those gone too.",
+);
+
 process.exitCode = checks.every((c) => c.ok) ? 0 : 1;
