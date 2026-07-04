@@ -11,7 +11,7 @@
     "connectors:link": "node scripts/link-connectors.mjs install",
     "hooks": "node scripts/link-hooks.mjs status",
     "hooks:link": "node scripts/link-hooks.mjs install",
-    "test": "node --test core/router.test.mjs",
+    "test": "node --test core/router.test.mjs core/feedback.test.mjs scripts/link-hooks.test.mjs scripts/link-connectors.test.mjs adapters/hooks/universal-hook.test.mjs",
     "route": "node core/router-cli.mjs route",
     "route:list": "node core/router-cli.mjs list",
     "route:eval": "node core/router-cli.mjs eval --engine hybrid",

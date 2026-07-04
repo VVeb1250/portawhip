@@ -71,7 +71,7 @@ async function mcpLinkedByHost(hostIds) {
   return linked;
 }
 
-function applyTarget(command, target) {
+export function applyTarget(command, target) {
   if (command === "status") return { changed: false, linked: hasHarnessBlock(target.path) };
   mkdirSync(dirname(target.path), { recursive: true });
   const changed =
@@ -105,7 +105,12 @@ async function main() {
   }
 }
 
-main().catch((error) => {
-  console.error(error.message);
-  process.exitCode = 1;
-});
+import { pathToFileURL } from "node:url";
+
+const isMain = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
+if (isMain) {
+  main().catch((error) => {
+    console.error(error.message);
+    process.exitCode = 1;
+  });
+}

@@ -96,10 +96,54 @@ unless add-mcp ships support for the newer schema.
   curated `cli`-type entry: does `source` match what's actually typed on
   the command line?
 
+## Gap review (2026-07-04, later same day) — what was found and closed
+
+User asked "ขาดอะไรมั้ย" (what's missing) after the cross-host consolidation.
+Found and fixed:
+
+- **Zero automated tests for the newest, most side-effecting code.**
+  `core/feedback.mjs`, `adapters/hooks/universal-hook.mjs`,
+  `scripts/link-hooks.mjs`, `scripts/link-connectors.mjs` had only manual
+  stdin smoke tests. Added `core/feedback.test.mjs` (temp-dir isolated),
+  `scripts/link-hooks.test.mjs` + `scripts/link-connectors.test.mjs`
+  (temp-file isolated, exercise the real install/remove/status logic), and
+  `adapters/hooks/universal-hook.test.mjs` (subprocess, real recipe.yaml —
+  clears its own `.hp-state/feedback` before/after each test). 39/39 total
+  now (`npm test` runs all 5 files).
+- **`link-hooks.mjs` and `link-connectors.mjs` ran `main()` unconditionally
+  at module load** — importing either for testing would have silently
+  mutated real global config. Both now guard `main()` behind the same
+  `isMain` check `adapters/instructions/generate.mjs` already used, and
+  export their pure logic (`installJsonHooks`/`removeJsonHooks`/
+  `statusJsonHooks`, `applyTarget`) for the new tests to call directly
+  against temp paths.
+- **`.hp-state/feedback/events.jsonl` had no rotation** — would grow
+  forever under real use. `core/feedback.mjs` now checks file size (no
+  read) on every append and prunes to the most recent 5000 events once it
+  crosses ~512KB — cheap on the common path, only pays a full read+rewrite
+  the rare time it's actually needed.
+- **`scripts/doctor.mjs` only checked Step 1's 3 backends** (context7/
+  ripgrep/pdf), never updated as the router/hooks/connectors layers were
+  built. Added 3 more live-probed checks (router registry, native hooks,
+  instruction connectors) — same "shell out to the real command, don't
+  reimplement" style as the original 3.
+- **`PLAN.md` read as an open roadmap** with no closing note — risk of a
+  future session re-planning finished work. Added a status banner at the
+  top pointing to this file.
+
+**Not actually fixed, only assessed — be honest about this:** "verify on
+macOS/Linux" cannot be done from this session (this machine is Windows).
+What was checked instead: `cross-spawn` is already used everywhere a
+shell/`.cmd` distinction would matter (Step 1 lesson), and no code path
+was found using Windows-only APIs or path syntax outside `node:path`'s
+`join`. That is a static-review confidence level, not a live cross-OS
+proof — don't upgrade this to "verified" until someone actually runs it on
+a Mac or Linux box.
+
 ## How to sanity-check anything in this repo yourself
 
 ```bash
-npm test                      # 16 unit tests, ~3s, mostly deterministic
+npm test                      # 39 unit/integration tests, ~5s
 npm run route:eval            # live eval against docs/router-eval-set.jsonl
 npm run route:compare         # keyword vs hybrid engine side by side
 npm run route -- --prompt "..."           # try any prompt against the live config

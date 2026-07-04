@@ -11,16 +11,39 @@
 // one. Good enough for the boost/decay signal this phase asks for; revisit
 // only if cross-session bleed is actually observed causing a wrong weight.
 
-import { appendFileSync, readFileSync, existsSync, mkdirSync } from "node:fs";
+import { appendFileSync, readFileSync, writeFileSync, existsSync, mkdirSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
+
+// Unbounded append-only growth was a real gap (found during a project
+// review, not a live incident): this log has no rotation, so heavy daily
+// use would grow it forever and slow computeFactors()'s full-file scan.
+// Cheap fix: check file SIZE (no read) on every append — only pay the cost
+// of a full read+rewrite the rare time the file actually crosses the cap.
+const PRUNE_CHECK_BYTES = 512 * 1024; // ~512KB before we even look closer
+const MAX_EVENTS = 5000; // keep the most recent N events after a prune
 
 export function feedbackPathFor(root) {
   return join(root, ".hp-state", "feedback", "events.jsonl");
 }
 
+function pruneIfOversized(path) {
+  let size;
+  try {
+    size = statSync(path).size;
+  } catch {
+    return;
+  }
+  if (size < PRUNE_CHECK_BYTES) return;
+
+  const lines = readFileSync(path, "utf8").split("\n").filter((line) => line.trim());
+  if (lines.length <= MAX_EVENTS) return;
+  writeFileSync(path, lines.slice(-MAX_EVENTS).join("\n") + "\n");
+}
+
 export function logEvent(root, event) {
   const path = feedbackPathFor(root);
   mkdirSync(dirname(path), { recursive: true });
+  pruneIfOversized(path);
   appendFileSync(path, JSON.stringify({ ts: Date.now(), ...event }) + "\n");
 }
 

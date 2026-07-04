@@ -1,5 +1,11 @@
 # Plan: Smart Capability Router (portable-harness-v2, Step 2+)
 
+> **Status: all 4 phases below are DONE (2026-07-04).** This file is kept as
+> the historical roadmap/design record — read `HANDOFF.md` first for what's
+> actually true right now (it decays much less than a roadmap doc written
+> before the work started). Don't re-plan or re-execute a phase from here
+> without checking `HANDOFF.md` and `git log` first.
+
 > Executor: Claude Sonnet. Work through phases in order. Each phase has explicit
 > **Verify** and **Exit criteria** — do not start the next phase until the current
 > one passes. Ask the user only when a decision gate says so.

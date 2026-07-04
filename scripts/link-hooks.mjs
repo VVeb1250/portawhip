@@ -86,7 +86,7 @@ function removeHook(config, nativeEvent) {
   return JSON.stringify(config.hooks[nativeEvent] ?? []) !== before;
 }
 
-function installJsonHooks(hostId, target) {
+export function installJsonHooks(hostId, target) {
   const config = readJson(target.path);
   config.hooks = config.hooks ?? {};
   let changed = false;
@@ -103,7 +103,7 @@ function installJsonHooks(hostId, target) {
   return changed;
 }
 
-function removeJsonHooks(target) {
+export function removeJsonHooks(target) {
   if (!existsSync(target.path)) return false;
   const config = readJson(target.path);
   let changed = false;
@@ -114,7 +114,7 @@ function removeJsonHooks(target) {
   return changed;
 }
 
-function statusJsonHooks(target) {
+export function statusJsonHooks(target) {
   if (!existsSync(target.path)) return { linked: false, details: [] };
   const config = readJson(target.path);
   const details = Object.entries(target.events)
@@ -191,7 +191,12 @@ async function main() {
   }
 }
 
-main().catch((error) => {
-  console.error(error.message);
-  process.exitCode = 1;
-});
+import { pathToFileURL } from "node:url";
+
+const isMain = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
+if (isMain) {
+  main().catch((error) => {
+    console.error(error.message);
+    process.exitCode = 1;
+  });
+}
