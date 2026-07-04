@@ -1,0 +1,5 @@
+- id: broken-entry
+  type: skill
+  source: github:example/example
+  route:
+    description: "missing triggers array"

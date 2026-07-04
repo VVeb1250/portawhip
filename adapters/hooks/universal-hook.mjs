@@ -1,0 +1,159 @@
+#!/usr/bin/env node
+// One hook body, many host adapters.
+//
+// Host config files should call this script with:
+//   node adapters/hooks/universal-hook.mjs --host <host-id> --event <logical-event>
+//
+// Logical events:
+//   user_prompt -> route capabilities and inject additionalContext
+//   post_tool   -> mark suggested capabilities as used
+
+import { existsSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { dirname, join, isAbsolute } from "node:path";
+import { loadIndex, readCachedIndex } from "../../core/registry.mjs";
+import { runRoute } from "../../core/route-entry.mjs";
+import { loadConfig } from "../../core/config.mjs";
+import { computeFactors, logEvent } from "../../core/feedback.mjs";
+
+const ROOT = dirname(dirname(dirname(fileURLToPath(import.meta.url))));
+const RECIPE_PATH = join(ROOT, "recipe.yaml");
+const CONFIG_PATH = join(ROOT, "router.config.yaml");
+const MIN_PROMPT_LEN = 8;
+
+function parseArgs(argv) {
+  const args = {};
+  for (let i = 2; i < argv.length; i += 1) {
+    if (argv[i].startsWith("--")) {
+      args[argv[i].slice(2)] = argv[i + 1];
+      i += 1;
+    }
+  }
+  return args;
+}
+
+async function readStdinJson() {
+  const raw = await new Promise((res, rej) => {
+    let data = "";
+    process.stdin.setEncoding("utf8");
+    process.stdin.on("data", (chunk) => (data += chunk));
+    process.stdin.on("end", () => res(data));
+    process.stdin.on("error", rej);
+  });
+  const text = raw.replace(/^\uFEFF/, "").trim();
+  return text ? JSON.parse(text) : {};
+}
+
+function payloadCwd(payload) {
+  return payload.cwd || process.cwd();
+}
+
+function promptFromPayload(payload) {
+  return (payload.prompt || payload.user_prompt || payload.input?.prompt || "").trim();
+}
+
+function readinessNote(hit, cwd) {
+  if (!hit.readyMarker) return "";
+  const ready = existsSync(join(cwd, hit.readyMarker));
+  return ready ? "" : ` (not set up here - run \`${hit.readyHint ?? "see docs"}\`)`;
+}
+
+function formatBlock(result, budgetChars, cwd) {
+  const lines = [];
+  let used = 0;
+  for (const hit of result) {
+    const line = `- ${hit.id} - ${hit.how_to_use}${readinessNote(hit, cwd)} - ${hit.pointer}`;
+    if (used + line.length > budgetChars && lines.length > 0) break;
+    lines.push(line);
+    used += line.length;
+  }
+  return lines.join("\n");
+}
+
+function outputAdditionalContext(host, nativeEvent, additionalContext) {
+  const hookEventName = nativeEvent || (host === "gemini-cli" ? "BeforeAgent" : "UserPromptSubmit");
+  return {
+    hookSpecificOutput: {
+      hookEventName,
+      additionalContext,
+    },
+  };
+}
+
+function resolveId(index, toolName, toolInput) {
+  const mcpMatch = /^mcp[_]{1,2}([^_]+)[_]{1,2}/.exec(toolName || "");
+  if (mcpMatch) {
+    const id = mcpMatch[1];
+    return index.entries.some((e) => e.id === id && e.type === "mcp") ? id : null;
+  }
+
+  if (["Read", "read_file"].includes(toolName)) {
+    const filePath = (toolInput?.file_path || toolInput?.path || "").replace(/\\/g, "/");
+    if (!filePath) return null;
+    const hit = index.entries.find(
+      (e) => e.type === "skill" && e.path && filePath.includes(String(e.path).replace(/\\/g, "/")),
+    );
+    return hit?.id ?? null;
+  }
+
+  if (["Bash", "run_shell_command", "bash"].includes(toolName)) {
+    const command = toolInput?.command || toolInput?.cmd || "";
+    const hit = index.entries.find((e) => {
+      if (e.type !== "cli") return false;
+      const name = e.route?.binary ?? e.source;
+      return name && new RegExp(`\\b${name}\\b`, "i").test(command);
+    });
+    return hit?.id ?? null;
+  }
+
+  return null;
+}
+
+function toolFields(payload) {
+  return {
+    toolName: payload.tool_name || payload.toolName || payload.tool || payload.input?.tool || "",
+    toolInput: payload.tool_input || payload.toolInput || payload.args || payload.input?.tool_input || {},
+  };
+}
+
+async function userPrompt(payload, args) {
+  const prompt = promptFromPayload(payload);
+  if (prompt.length < MIN_PROMPT_LEN || prompt.startsWith("/")) return;
+
+  const config = loadConfig(CONFIG_PATH);
+  const index = await loadIndex(RECIPE_PATH);
+  const graphPath =
+    config.graphPath && !isAbsolute(config.graphPath) ? join(ROOT, config.graphPath) : config.graphPath;
+  const factors = computeFactors(ROOT);
+  const result = runRoute(index, prompt, { ...config, graphPath, factors });
+  if (!result || result.length === 0) return;
+
+  const block = formatBlock(result, config.pushBudgetChars, payloadCwd(payload));
+  if (!block) return;
+
+  for (const hit of result) {
+    logEvent(ROOT, { type: "suggested", id: hit.id, sessionId: payload.session_id ?? null });
+  }
+
+  process.stdout.write(JSON.stringify(outputAdditionalContext(args.host, args.nativeEvent, block)));
+}
+
+async function postTool(payload) {
+  const index = readCachedIndex(RECIPE_PATH);
+  if (!index) return;
+  const { toolName, toolInput } = toolFields(payload);
+  const id = resolveId(index, toolName, toolInput);
+  if (!id) return;
+  logEvent(ROOT, { type: "used", id, tool: toolName, sessionId: payload.session_id ?? null });
+}
+
+async function main() {
+  const args = parseArgs(process.argv);
+  const payload = await readStdinJson();
+  if (args.event === "user_prompt") await userPrompt(payload, args);
+  if (args.event === "post_tool") await postTool(payload, args);
+}
+
+main().catch(() => {
+  // Hooks must fail open; a sync-layer bug should never block the user.
+});

@@ -1,0 +1,10 @@
+{
+  "edges": [
+    {
+      "from": "database-migrations",
+      "to": "postgres-patterns",
+      "type": "related_skill",
+      "weight": 1
+    }
+  ]
+}

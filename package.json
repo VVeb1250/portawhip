@@ -1,0 +1,29 @@
+{
+  "name": "portable-harness-v2",
+  "private": true,
+  "type": "module",
+  "version": "0.0.1",
+  "description": "Step 1 proof: one recipe format, dispatched to existing backends (add-mcp / mise / asm), verified across hosts.",
+  "scripts": {
+    "load": "node scripts/load.mjs",
+    "doctor": "node scripts/doctor.mjs",
+    "connectors": "node scripts/link-connectors.mjs status",
+    "connectors:link": "node scripts/link-connectors.mjs install",
+    "hooks": "node scripts/link-hooks.mjs status",
+    "hooks:link": "node scripts/link-hooks.mjs install",
+    "test": "node --test core/router.test.mjs",
+    "route": "node core/router-cli.mjs route",
+    "route:list": "node core/router-cli.mjs list",
+    "route:eval": "node core/router-cli.mjs eval --engine hybrid",
+    "route:compare": "node core/router-cli.mjs compare",
+    "route:graph": "node core/router-cli.mjs graph-compile --out .hp-state/capability-graph.json"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "add-mcp": "^1.13.0",
+    "agent-skill-manager": "^2.7.0",
+    "cross-spawn": "^7.0.6",
+    "js-yaml": "^4.1.0",
+    "minisearch": "^7.2.0"
+  }
+}

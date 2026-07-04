@@ -1,0 +1,46 @@
+# Tunable router defaults. This is data the scorer reads at runtime —
+# not decision logic. Missing file / missing keys fall back to the same
+# defaults shown here (core/config.mjs), so this file is optional.
+#
+# Two thresholds, not one — curated (recipe.yaml) triggers are deliberately
+# authored, so a single hit is trustworthy (recipeThreshold=1). Auto-
+# discovered triggers (core/discover.mjs) are inferred from free-text
+# descriptions across 300+ installed skills and produce real single-word
+# noise (e.g. "write" fired on "write a poem about the ocean" against
+# writing-related skills) — verified requiring 2 distinct hits removes that
+# false positive without losing true matches (grep/pdf/docs still route).
+engine: hybrid
+threshold: 2
+recipeThreshold: 1
+# Hybrid retrieval uses minisearch (core/sparse-retriever.mjs) — score scale
+# is in the hundreds/thousands, not the small BM25-ish numbers the old
+# hand-rolled engine produced. Two thresholds here too, for the same reason
+# as recipeThreshold above: curated entries (recipe.yaml) need a much lower
+# bar than auto-discovered ones. Verified empirically (docs/phase2.5-verify.md):
+# generic domain vocabulary shared across hundreds of skill docs ("architecture",
+# "patterns") can outscore a genuine curated match (ripgrep/context7), so one
+# global threshold can't separate "real auto match" from "noise" AND "real
+# curated match" at the same time. Calibrated against docs/router-eval-set.jsonl:
+# 350 clears all 18 negatives (0 false positives, including both hard prompts
+# that regress-test the old noisy hook) while keeping all 5 original Phase-2
+# positives; costs 4 of 7 newer p25 positives (accepted: silence > wrong guess).
+hybridThreshold: 350
+hybridRecipeThreshold: 130
+# Auto-discovered MCP/CLI tools are a third bucket, not "skills with a lower
+# bar": add-mcp/mise give no description, so their documents are just a bare
+# name with almost nothing for generic vocabulary to falsely match against.
+# Verified: 0 false positives from any mcp/cli-type entry across the full
+# negative eval set, so this can sit far below hybridThreshold without risk
+# — recovers real "use <tool>" matches (exa/github/playwright) that
+# hybridThreshold=350 was silently dropping.
+hybridToolThreshold: 80
+# Optional Phase-2.5 graph. If the file is absent, graph expansion is a no-op.
+# Schema: {"edges":[{"from":"capability-id","to":"neighbor-id","type":"related_skill","weight":1}]}
+graphPath: .hp-state/capability-graph.json
+graphBoost: 0.25
+k: 5
+# Phase 3 push-mode hook: hard char budget per injected suggestion block
+# (proxy for tokens — no tokenizer dependency for this). Lines are added
+# until the next one would exceed this, so it degrades to fewer/shorter
+# lines rather than truncating mid-line.
+pushBudgetChars: 320

@@ -1,0 +1,65 @@
+# Step 1 proof-of-concept recipe.
+# Each entry declares WHAT capability to load, not HOW — the dispatcher
+# picks the backend per `type` and shells out to a tool that already
+# solves that backend well (add-mcp / mise / asm). No install logic
+# lives in this repo.
+- id: context7
+  type: mcp
+  source: https://mcp.context7.com/mcp
+  route:
+    triggers: ["library docs", "api docs", "documentation", "how to use", "sdk usage", "package docs"]
+    description: "Fetch current docs/examples for a library, framework, or API"
+    when: [user_prompt]
+    inject: hint
+
+- id: ripgrep
+  type: cli
+  source: ripgrep
+  route:
+    triggers: ["search codebase", "grep", "find text in files", "regex search"]
+    description: "Fast regex search across files"
+    when: [user_prompt]
+    inject: hint
+    binary: rg
+
+- id: pdf
+  # id matches the skill's real installed name (not "anthropic-skills") on
+  # purpose: registry.mjs dedupes curated vs. auto-discovered entries by id,
+  # and this skill also gets auto-discovered once installed (asm reports it
+  # as "pdf" in every host's skill dir). Matching ids lets the curated,
+  # deliberately-authored route win outright instead of competing on score
+  # against a separately-discovered duplicate of the same capability.
+  type: skill
+  source: github:anthropics/skills
+  path: skills/pdf
+  route:
+    triggers: ["pdf", "merge pages", "ocr", "extract table"]
+    description: "Read/merge/split/OCR PDF files"
+    when: [user_prompt]
+    inject: hint
+
+- id: codegraph
+  # Same curated-override-wins pattern as pdf above: codegraph is already
+  # auto-discovered (installed globally as an MCP server), but it also
+  # needs a per-project .codegraph/ index before it's actually usable here.
+  # Observed live: the router suggested codegraph in THIS repo, which has
+  # no .codegraph/ — readyMarker/readyHint let the suggestion say so
+  # instead of silently implying it just works.
+  type: mcp
+  source: codegraph
+  route:
+    triggers: ["codegraph", "code graph", "call graph", "blast radius", "symbol graph"]
+    description: "MCP server: codebase knowledge graph (symbols, edges, call paths)"
+    when: [user_prompt]
+    inject: hint
+    readyMarker: ".codegraph"
+    readyHint: "codegraph init"
+
+- id: harness-router
+  type: mcp
+  source: node
+  args: ["server/mcp-server.mjs"]
+  name: harness-router
+  scope: project
+  # No route: block on purpose — this is the router itself (meta capability),
+  # not something to route *to*. Installable via the loader, never pushed.

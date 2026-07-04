@@ -1,0 +1,86 @@
+// PLAN.md Phase 4 step 1/2: append-only usage log + bounded weight
+// adjustment. Append-only JSONL, never rewritten in place — matches the
+// "no daemon, cheap, live-probed" style already used elsewhere in this
+// repo, and avoids concurrent-write corruption risk from two hook
+// processes editing the same file.
+//
+// Simplification (documented, not hidden): correlation is per-capability-id
+// across all events, not strictly scoped to one session — a "used" event
+// for id X counts as a hit for whatever the most recent unresolved
+// "suggested" event for X was, regardless of which session logged either
+// one. Good enough for the boost/decay signal this phase asks for; revisit
+// only if cross-session bleed is actually observed causing a wrong weight.
+
+import { appendFileSync, readFileSync, existsSync, mkdirSync } from "node:fs";
+import { dirname, join } from "node:path";
+
+export function feedbackPathFor(root) {
+  return join(root, ".hp-state", "feedback", "events.jsonl");
+}
+
+export function logEvent(root, event) {
+  const path = feedbackPathFor(root);
+  mkdirSync(dirname(path), { recursive: true });
+  appendFileSync(path, JSON.stringify({ ts: Date.now(), ...event }) + "\n");
+}
+
+export function readEvents(root) {
+  const path = feedbackPathFor(root);
+  if (!existsSync(path)) return [];
+  return readFileSync(path, "utf8")
+    .split("\n")
+    .filter((line) => line.trim())
+    .map((line) => {
+      try {
+        return JSON.parse(line);
+      } catch {
+        return null;
+      }
+    })
+    .filter(Boolean);
+}
+
+// Bounded per PLAN.md spec: x0.5 (ignored streak) .. x2.0 (used streak).
+// Streak = consecutive most-recent suggestions for this id with the same
+// used/ignored outcome, walking back from the newest event.
+export function computeFactors(root) {
+  const events = readEvents(root).sort((a, b) => a.ts - b.ts);
+  const byId = new Map();
+  for (const e of events) {
+    if (e.type !== "suggested" && e.type !== "used") continue;
+    if (!byId.has(e.id)) byId.set(e.id, []);
+    byId.get(e.id).push(e);
+  }
+
+  const factors = new Map();
+  for (const [id, idEvents] of byId) {
+    // Resolve each "suggested" against the next "used" that follows it in
+    // time for the same id -> a bounded sequence of hit/miss outcomes.
+    const outcomes = [];
+    let pendingSuggestion = false;
+    for (const e of idEvents) {
+      if (e.type === "suggested") {
+        if (pendingSuggestion) outcomes.push(false); // prior suggestion never used
+        pendingSuggestion = true;
+      } else if (e.type === "used" && pendingSuggestion) {
+        outcomes.push(true);
+        pendingSuggestion = false;
+      }
+    }
+    if (pendingSuggestion) outcomes.push(false);
+
+    if (outcomes.length === 0) {
+      factors.set(id, 1.0);
+      continue;
+    }
+    let streak = 0;
+    const last = outcomes[outcomes.length - 1];
+    for (let i = outcomes.length - 1; i >= 0 && outcomes[i] === last; i -= 1) streak += 1;
+
+    const factor = last
+      ? Math.min(2.0, 1 + 0.2 * streak)
+      : Math.max(0.5, 1 - 0.15 * streak);
+    factors.set(id, Number(factor.toFixed(3)));
+  }
+  return factors;
+}

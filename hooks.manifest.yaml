@@ -1,0 +1,12 @@
+# Canonical hook sync manifest.
+# Each logical hook maps to the nearest native lifecycle event per host.
+hooks:
+  route-on-prompt:
+    logicalEvent: user_prompt
+    description: "Suggest relevant harness-router capabilities before the agent starts work."
+    enabled: true
+  mark-tool-feedback:
+    logicalEvent: post_tool
+    description: "Record whether a suggested MCP/CLI/skill capability was actually used."
+    enabled: true
+
