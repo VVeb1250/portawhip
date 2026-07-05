@@ -96,11 +96,31 @@ export function actionDirective(hit, host) {
   return `run it directly now: ${hit.pointer}`;
 }
 
-function formatBlock(result, budgetChars, cwd, host) {
+// Every "suggested" event is already logged per-sessionId (see the bottom
+// of userPrompt()) purely for computeFactors' boost/decay signal - never
+// read back to affect what gets rendered. Found live (2026-07-06): the
+// mcp directive's ToolSearch-fallback clause alone costs ~150 chars, and
+// full lines repeat every single turn a capability keeps matching, even
+// within the same session where the agent was already told this once.
+// Reusing that existing log to render tersely on repeat costs nothing new
+// (no state to add) and only pays the full, detailed line once per id per
+// session - generic over id/host, no capability-specific logic.
+function sessionSuggestedIds(root, sessionId) {
+  if (!sessionId) return new Set();
+  return new Set(
+    readEvents(root)
+      .filter((e) => e.type === "suggested" && e.sessionId === sessionId)
+      .map((e) => e.id),
+  );
+}
+
+function formatBlock(result, budgetChars, cwd, host, alreadySuggestedIds) {
   const lines = [];
   let used = 0;
   for (const hit of result) {
-    const line = `- ${hit.id} - ${hit.how_to_use}${readinessNote(hit, cwd)} - ${actionDirective(hit, host)}`;
+    const line = alreadySuggestedIds.has(hit.id)
+      ? `- ${hit.id} - still relevant, use it again if applicable`
+      : `- ${hit.id} - ${hit.how_to_use}${readinessNote(hit, cwd)} - ${actionDirective(hit, host)}`;
     if (used + line.length > budgetChars && lines.length > 0) break;
     lines.push(line);
     used += line.length;
@@ -176,7 +196,8 @@ async function userPrompt(payload, args) {
   const result = runRoute(index, prompt, { ...config, graphPath, factors });
   if (!result || result.length === 0) return;
 
-  const block = formatBlock(result, config.pushBudgetChars, payloadCwd(payload), args.host);
+  const alreadySuggestedIds = sessionSuggestedIds(ROOT, payload.session_id ?? null);
+  const block = formatBlock(result, config.pushBudgetChars, payloadCwd(payload), args.host, alreadySuggestedIds);
   if (!block) return;
 
   for (const hit of result) {

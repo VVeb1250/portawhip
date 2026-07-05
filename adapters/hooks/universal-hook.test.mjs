@@ -59,6 +59,24 @@ test("universal-hook: user_prompt emits additionalContext on a confident match",
   }
 });
 
+test("universal-hook: user_prompt renders tersely once a capability was already suggested this session", () => {
+  clearFeedback();
+  try {
+    const args = ["--host", "claude-code", "--event", "user_prompt", "--nativeEvent", "UserPromptSubmit"];
+    const payload = { prompt: "search codebase for the word foo", session_id: "test-session-repeat" };
+
+    const first = JSON.parse(runHook(args, payload));
+    assert.match(first.hookSpecificOutput.additionalContext, /ripgrep/);
+    assert.match(first.hookSpecificOutput.additionalContext, /run it directly now/);
+
+    const second = JSON.parse(runHook(args, payload));
+    assert.match(second.hookSpecificOutput.additionalContext, /- ripgrep - still relevant, use it again/);
+    assert.doesNotMatch(second.hookSpecificOutput.additionalContext, /run it directly now/);
+  } finally {
+    restoreFeedback();
+  }
+});
+
 test("universal-hook: user_prompt stays silent on a short/unrelated prompt", () => {
   clearFeedback();
   try {
