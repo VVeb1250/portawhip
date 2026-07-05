@@ -303,6 +303,43 @@ test("hybrid: suggest filters split skills from tools", () => {
   assert.equal(tools[0].id, "pdf-tool");
 });
 
+test("hybrid: tool and skill lanes don't crowd each other out of a shared k", () => {
+  // Same fixture as the suggest-filter test above, but called the way real
+  // callers actually do (push hook / MCP route tool / router-cli route all
+  // default to suggest:"any", never "skill" or "tool" alone). A single
+  // shared slice-to-k treats pdf-skill and pdf-tool as competitors for the
+  // same k slots even though a task usually wants both side by side (the
+  // tool to do it, the skill for how to do it well) — k:1 here makes that
+  // crowding impossible to miss if the fix regresses.
+  const index = {
+    entries: [
+      {
+        id: "pdf-skill",
+        type: "skill",
+        origin: "auto:skill",
+        path: "/skills/pdf-skill",
+        route: {
+          triggers: ["pdf"],
+          description: "PDF skill",
+        },
+      },
+      {
+        id: "pdf-tool",
+        type: "mcp",
+        origin: "auto:mcp",
+        source: "pdf-tool",
+        route: {
+          triggers: ["pdf"],
+          description: "PDF tool",
+        },
+      },
+    ],
+  };
+  const result = routeHybrid(index, "pdf", { hybridThreshold: 0.01, k: 1 });
+  assert.ok(result.some((r) => r.id === "pdf-skill"), "skill lane must not be crowded out");
+  assert.ok(result.some((r) => r.id === "pdf-tool"), "tool lane must not be crowded out");
+});
+
 test("hybrid: capability docs enrich skills from SKILL metadata without bloating results", () => {
   const index = {
     entries: [

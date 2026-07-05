@@ -180,7 +180,26 @@ export function routeHybrid(
   // actionAlignmentFactor is folded into the score above, not fused as a
   // second ranking — see that file for why). Keeping fusion in the path
   // makes dense embeddings and bounded graph expansion additive later.
-  const fused = reciprocalRankFusion([filtered]).slice(0, k);
+  //
+  // Tools and skills get their own reserved k slots, not one shared slice.
+  // Found live: real callers (push hook, MCP route tool, router-cli route)
+  // all call with suggest:"any", so a query where BOTH a skill and a tool
+  // are genuinely relevant used to have them compete for the same k slots
+  // — a strong skill match could silently crowd a real tool match (or vice
+  // versa) out of the result entirely, even though a task usually wants
+  // both side by side (the tool to do it, the skill for how to do it well).
+  const lanes = new Map();
+  for (const candidate of filtered) {
+    const kind = capabilityKind(candidate.doc.type);
+    if (!lanes.has(kind)) lanes.set(kind, []);
+    lanes.get(kind).push(candidate);
+  }
+  const laneWinners = [...lanes.values()].flatMap((laneCandidates) =>
+    reciprocalRankFusion([laneCandidates]).slice(0, k),
+  );
+  const fused = laneWinners.sort(
+    (a, b) => (b.score ?? 0) - (a.score ?? 0) || a.doc.id.localeCompare(b.doc.id),
+  );
   const routed = fused.map((item) => formatResult(item, item.bar));
   if (!includeWeak || routed.length >= k) return routed;
 
