@@ -5,6 +5,7 @@
 // a constant here — this module takes them as explicit call arguments.
 
 import { capabilityKind, matchesSuggestKind } from "./capability-kind.mjs";
+import { pointerFor } from "./capability-docs.mjs";
 
 function escapeRegex(s) {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -52,7 +53,7 @@ export function route(index, prompt, { threshold, recipeThreshold, k, suggest = 
         why: `matched ${score} route trigger${score === 1 ? "" : "s"}`,
         action: entry.route.action ?? (entry.type === "skill" ? "read_skill" : "use_capability"),
         how_to_use: entry.route.description,
-        pointer: entry.path ?? entry.source,
+        pointer: pointerFor(entry),
         origin: entry.origin,
         readyMarker: entry.route.readyMarker ?? null,
         readyHint: entry.route.readyHint ?? null,

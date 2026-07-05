@@ -90,6 +90,15 @@ function readSkillMetadata(path) {
 }
 
 export function pointerFor(entry) {
+  // Every type:cli entry in this project installs via mise (scripts/load.mjs's
+  // loadCli always dispatches through it), so a bare command name only
+  // resolves if the invoking shell happens to have `mise activate` wired in
+  // - not guaranteed, and not something this project can set up on someone
+  // else's machine (VISION.md: cross-OS by detection, not a per-machine
+  // setup step). `mise exec --` always works, on every OS, with zero setup.
+  // Found live 2026-07-05: a bundle-installed CLI worked via mise but the
+  // bare command was "not found" in a shell with no mise activation.
+  if (entry.type === "cli" && entry.source) return `mise exec -- ${entry.source}`;
   return entry.path ?? entry.source ?? null;
 }
 

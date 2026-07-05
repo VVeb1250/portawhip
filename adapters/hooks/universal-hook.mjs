@@ -13,6 +13,7 @@ import { fileURLToPath } from "node:url";
 import { dirname, join, isAbsolute } from "node:path";
 import { loadIndex, readCachedIndex } from "../../core/registry.mjs";
 import { runRoute } from "../../core/route-entry.mjs";
+import { pointerFor } from "../../core/capability-docs.mjs";
 import { loadConfig } from "../../core/config.mjs";
 import { computeFactors, logEvent, readEvents } from "../../core/feedback.mjs";
 import { readActiveSelection, resolveRecipePaths } from "../../core/bundle-state.mjs";
@@ -168,7 +169,7 @@ async function postTool(payload, args) {
   // produced "undefined - undefined" (found live 2026-07-05, first time a
   // curated CLI entry with a `binary` field actually matched a Bash command).
   const description = entry.route?.description ?? "";
-  const pointer = entry.path ?? entry.source ?? "";
+  const pointer = pointerFor(entry) ?? "";
   const nudge = `Note: "${toolName}" just did something \`${id}\` already covers - ${description} - ${pointer}. Prefer it next time.`;
   process.stdout.write(JSON.stringify(outputAdditionalContext(args.host, args.nativeEvent, nudge)));
 }
