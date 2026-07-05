@@ -1,6 +1,7 @@
 import { buildCapabilityDocs } from "./capability-docs.mjs";
 import { expandWithGraph, loadCapabilityGraph } from "./capability-graph.mjs";
 import { capabilityKind, matchesSuggestKind } from "./capability-kind.mjs";
+import { actionAlignmentFactor } from "./concept-vector.mjs";
 import { reciprocalRankFusion } from "./fusion.mjs";
 import { sparseRetrieve } from "./sparse-retriever.mjs";
 
@@ -131,7 +132,10 @@ export function routeHybrid(
   const graph = loadCapabilityGraph(graphPath);
   const expanded = expandWithGraph(sparse, docs, graph, { boost: graphBoost }).map((candidate) => ({
     ...candidate,
-    score: candidate.score * (factors?.get(candidate.doc.id) ?? 1.0),
+    score:
+      candidate.score *
+      (factors?.get(candidate.doc.id) ?? 1.0) *
+      actionAlignmentFactor(candidate.doc, prompt),
   }));
   const candidates = expanded
     .filter((candidate) => matchesSuggestKind(candidate.doc.type, suggest))
@@ -150,7 +154,9 @@ export function routeHybrid(
     return candidates.slice(0, k).map((candidate) => formatResult(candidate, candidate.bar));
   }
 
-  // Phase 2.5 starts with one retrieval channel. Keeping fusion in the path
+  // Phase 2.5 starts with one retrieval channel (core/concept-vector.mjs's
+  // actionAlignmentFactor is folded into the score above, not fused as a
+  // second ranking — see that file for why). Keeping fusion in the path
   // makes dense embeddings and bounded graph expansion additive later.
   const fused = reciprocalRankFusion([filtered]).slice(0, k);
   const routed = fused.map((item) => formatResult(item, item.bar));

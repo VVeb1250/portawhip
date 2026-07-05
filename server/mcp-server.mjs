@@ -13,6 +13,7 @@ import { listAll } from "../core/scorer.mjs";
 import { explainRoute } from "../core/route-entry.mjs";
 import { loadConfig } from "../core/config.mjs";
 import { computeFactors, logEvent } from "../core/feedback.mjs";
+import { stackFactors, combineFactors } from "../core/stack-detect.mjs";
 import { readActiveSelection, resolveRecipePaths } from "../core/bundle-state.mjs";
 
 // This server is registered globally (add-mcp may promote project scope to
@@ -44,7 +45,7 @@ server.tool(
     // installing it globally).
     const graphPath =
       config.graphPath && !isAbsolute(config.graphPath) ? join(ROOT, config.graphPath) : config.graphPath;
-    const factors = computeFactors(ROOT);
+    const factors = combineFactors(computeFactors(ROOT), stackFactors(index, process.cwd()));
     const result = explainRoute(index, query, { ...config, graphPath, k: k ?? config.k, factors });
     logEvent(ROOT, {
       type: "route",

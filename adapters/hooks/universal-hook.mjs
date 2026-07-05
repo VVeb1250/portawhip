@@ -16,6 +16,7 @@ import { runRoute } from "../../core/route-entry.mjs";
 import { pointerFor } from "../../core/capability-docs.mjs";
 import { loadConfig } from "../../core/config.mjs";
 import { computeFactors, logEvent, readEvents } from "../../core/feedback.mjs";
+import { stackFactors, combineFactors } from "../../core/stack-detect.mjs";
 import { readActiveSelection, resolveRecipePaths } from "../../core/bundle-state.mjs";
 
 const ROOT = dirname(dirname(dirname(fileURLToPath(import.meta.url))));
@@ -129,7 +130,7 @@ async function userPrompt(payload, args) {
   const index = await loadIndex(RECIPE_PATHS);
   const graphPath =
     config.graphPath && !isAbsolute(config.graphPath) ? join(ROOT, config.graphPath) : config.graphPath;
-  const factors = computeFactors(ROOT);
+  const factors = combineFactors(computeFactors(ROOT), stackFactors(index, payloadCwd(payload)));
   const result = runRoute(index, prompt, { ...config, graphPath, factors });
   if (!result || result.length === 0) return;
 
@@ -137,7 +138,7 @@ async function userPrompt(payload, args) {
   if (!block) return;
 
   for (const hit of result) {
-    logEvent(ROOT, { type: "suggested", id: hit.id, sessionId: payload.session_id ?? null });
+    logEvent(ROOT, { type: "suggested", id: hit.id, prompt, sessionId: payload.session_id ?? null });
   }
 
   process.stdout.write(JSON.stringify(outputAdditionalContext(args.host, args.nativeEvent, block)));

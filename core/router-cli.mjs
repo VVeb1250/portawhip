@@ -6,11 +6,14 @@ import { loadIndex } from "./registry.mjs";
 import { listAll } from "./scorer.mjs";
 import { runRoute } from "./route-entry.mjs";
 import { compileCapabilityGraph, writeCapabilityGraph } from "./capability-graph-compiler.mjs";
-import { runRouterEval, runRouterEvalComparison } from "./router-eval.mjs";
+import { runRouterEval, runRouterEvalComparison, loadEvalSet } from "./router-eval.mjs";
 import { loadConfig } from "./config.mjs";
 import { computeFactors } from "./feedback.mjs";
+import { stackFactors, combineFactors } from "./stack-detect.mjs";
+import { harvestHardNegatives } from "./eval-harvest.mjs";
 import { readActiveSelection, resolveRecipePaths } from "./bundle-state.mjs";
 import { dirname, resolve } from "node:path";
+import { appendFileSync } from "node:fs";
 
 function parseArgs(argv) {
   const args = {};
@@ -54,7 +57,10 @@ async function main() {
       graphBoost: args.graphBoost ? Number(args.graphBoost) : config.graphBoost,
       suggest: args.suggest ?? "any",
       k: args.k ? Number(args.k) : config.k,
-      factors: computeFactors(dirname(resolve(primaryRecipe))),
+      factors: combineFactors(
+        computeFactors(dirname(resolve(primaryRecipe))),
+        stackFactors(index, process.cwd()),
+      ),
     };
     const engine = args.engine ?? config.engine;
     const result = runRoute(index, args.prompt, { ...opts, engine });
@@ -104,6 +110,29 @@ async function main() {
     return;
   }
 
+  if (command === "harvest-negatives") {
+    const evalPath = args.evalPath ?? "docs/router-eval-set.jsonl";
+    const minIgnoredCount = args.minIgnoredCount ? Number(args.minIgnoredCount) : 2;
+    const feedbackRoot = dirname(resolve(primaryRecipe));
+    const existing = loadEvalSet(evalPath);
+    const existingPrompts = new Set(existing.map((c) => c.prompt.toLowerCase()));
+    const harvested = harvestHardNegatives(feedbackRoot, { minIgnoredCount });
+    const fresh = harvested.filter((c) => !existingPrompts.has(c.prompt.toLowerCase()));
+    if (fresh.length > 0) {
+      appendFileSync(evalPath, `${fresh.map((c) => JSON.stringify(c)).join("\n")}\n`);
+    }
+    console.log(
+      JSON.stringify({
+        status: "success",
+        harvested: harvested.length,
+        added: fresh.length,
+        skippedAsDuplicate: harvested.length - fresh.length,
+        evalPath,
+      }),
+    );
+    return;
+  }
+
   if (command === "graph-compile") {
     const graph = compileCapabilityGraph(index, {
       maxEdgesPerNode: args.maxEdgesPerNode ? Number(args.maxEdgesPerNode) : undefined,
@@ -123,7 +152,9 @@ async function main() {
     return;
   }
 
-  console.error(`unknown command "${command}". Use "route", "eval", "compare", "graph-compile", or "list".`);
+  console.error(
+    `unknown command "${command}". Use "route", "eval", "compare", "harvest-negatives", "graph-compile", or "list".`,
+  );
   process.exitCode = 1;
 }
 
