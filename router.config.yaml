@@ -43,4 +43,15 @@ k: 5
 # (proxy for tokens — no tokenizer dependency for this). Lines are added
 # until the next one would exceed this, so it degrades to fewer/shorter
 # lines rather than truncating mid-line.
-pushBudgetChars: 320
+#
+# Bumped 320 -> 640 (2026-07-06): adding actionDirective() (invocation
+# syntax per kind, so suggestions actually get acted on) made a first-time
+# mcp line ~265 chars on its own (the ToolSearch-fallback clause is the
+# biggest chunk) - 320 only fit one such line even when lane-reserved
+# results (core/hybrid-router.mjs) legitimately surface 2-3 relevant
+# capabilities across skill/agent/tool lanes at once. Repeat mentions
+# within the same session already render tersely (universal-hook.mjs's
+# sessionSuggestedIds), so this cost is paid at most once per id per
+# session, not every turn - 640 fits ~2 full mcp lines or a full
+# skill+agent+tool combo comfortably.
+pushBudgetChars: 640

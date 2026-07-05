@@ -15,7 +15,11 @@ const DEFAULTS = {
   graphPath: ".hp-state/capability-graph.json",
   graphBoost: 0.25,
   k: 5,
-  pushBudgetChars: 320,
+  // See router.config.yaml's own comment for the 320 -> 640 rationale
+  // (actionDirective()'s mcp/ToolSearch clause cost, paid at most once per
+  // id per session since repeats render tersely) - kept in sync here so a
+  // project with no router.config.yaml at all still gets the same fix.
+  pushBudgetChars: 640,
 };
 
 export function loadConfig(path = "router.config.yaml") {
