@@ -25,11 +25,13 @@ function ensureStub() {
 }
 
 function parseArgs(argv) {
-  const args = { command: argv[2] ?? "status", scope: "project" };
+  const args = { command: argv[2] ?? "status", scope: "project", json: false };
   for (let i = 3; i < argv.length; i += 1) {
     if (argv[i] === "--scope") {
       args.scope = argv[i + 1];
       i += 1;
+    } else if (argv[i] === "--json") {
+      args.json = true;
     } else {
       throw new Error(`unknown argument: ${argv[i]}`);
     }
@@ -184,26 +186,65 @@ function applyTarget(command, hostId, target) {
   return { action: changed ? "changed" : "no-op" };
 }
 
-async function main() {
-  const { command, scope } = parseArgs(process.argv);
+export async function collectHookLinks({ command = "status", scope = "project" } = {}) {
   const hosts = await detectHosts();
   const hostIds = hosts.mcpHosts;
-
-  console.log(`hook command: ${command}`);
-  console.log(`scope: ${scope}`);
-  console.log(`detected MCP hosts: ${hostIds.join(", ") || "(none)"}`);
-  console.log("\n== hook links ==");
+  const rows = [];
 
   for (const hostId of hostIds) {
     const target = hookTargetForHost(hostId, { scope });
     if (!target) {
-      console.log(`${hostId}: hooks:unsupported`);
+      rows.push({
+        type: "hook",
+        hostId,
+        scope,
+        supported: false,
+        action: "unsupported",
+        status: "unsupported",
+        path: null,
+        details: [],
+        note: null,
+      });
       continue;
     }
     const result = applyTarget(command, hostId, target);
-    const detail = result.details?.length ? ` (${result.details.join(", ")})` : "";
-    const note = target.note ? `; ${target.note}` : "";
-    console.log(`${hostId}: hooks:${result.action}; ${resolve(target.path)}${detail}${note}`);
+    rows.push({
+      type: "hook",
+      hostId,
+      scope,
+      supported: true,
+      action: result.action,
+      status: result.action,
+      path: resolve(target.path),
+      details: result.details ?? [],
+      note: target.note ?? null,
+    });
+  }
+
+  return { command, scope, hostIds, rows };
+}
+
+async function main() {
+  const { command, scope, json } = parseArgs(process.argv);
+  const result = await collectHookLinks({ command, scope });
+  if (json) {
+    console.log(JSON.stringify(result, null, 2));
+    return;
+  }
+
+  console.log(`hook command: ${command}`);
+  console.log(`scope: ${scope}`);
+  console.log(`detected MCP hosts: ${result.hostIds.join(", ") || "(none)"}`);
+  console.log("\n== hook links ==");
+
+  for (const row of result.rows) {
+    if (!row.supported) {
+      console.log(`${row.hostId}: hooks:unsupported`);
+      continue;
+    }
+    const detail = row.details.length ? ` (${row.details.join(", ")})` : "";
+    const note = row.note ? `; ${row.note}` : "";
+    console.log(`${row.hostId}: hooks:${row.action}; ${row.path}${detail}${note}`);
   }
 }
 

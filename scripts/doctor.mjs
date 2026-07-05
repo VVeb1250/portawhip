@@ -5,6 +5,10 @@
 
 import spawnSync from "cross-spawn";
 
+function parseArgs(argv) {
+  return { json: argv.includes("--json") };
+}
+
 function capture(cmd, args) {
   const result = spawnSync.sync(cmd, args, { encoding: "utf8" });
   return { ok: result.status === 0, output: (result.stdout || "") + (result.stderr || "") };
@@ -55,6 +59,8 @@ function checkConnectors(scope) {
   return { label: `instruction connectors (link-connectors.mjs, ${scope} scope)`, ok: r.ok, detail: r.output.trim() };
 }
 
+const { json } = parseArgs(process.argv.slice(2));
+
 const checks = [
   checkMcp(),
   checkCli(),
@@ -65,6 +71,13 @@ const checks = [
   checkConnectors("project"),
   checkConnectors("global"),
 ];
+
+if (json) {
+  const ok = checks.every((c) => c.ok);
+  console.log(JSON.stringify({ status: ok ? "ok" : "fail", checks }, null, 2));
+  process.exitCode = ok ? 0 : 1;
+  process.exit();
+}
 
 console.log("\n== doctor: unified status ==");
 for (const c of checks) console.log(`${c.ok ? "OK  " : "FAIL"} ${c.label}`);

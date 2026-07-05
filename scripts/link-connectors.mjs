@@ -17,7 +17,7 @@ const VALID_COMMANDS = new Set(["status", "install", "remove"]);
 const VALID_SCOPES = new Set(["project", "global"]);
 
 function parseArgs(argv) {
-  const args = { command: argv[2] ?? "status", scope: "project" };
+  const args = { command: argv[2] ?? "status", scope: "project", json: false };
   for (let i = 3; i < argv.length; i += 1) {
     const arg = argv[i];
     if (arg === "--scope") {
@@ -25,6 +25,8 @@ function parseArgs(argv) {
       i += 1;
     } else if (arg === "--all-scopes") {
       args.scope = "all";
+    } else if (arg === "--json") {
+      args.json = true;
     } else {
       throw new Error(`unknown argument: ${arg}`);
     }
@@ -100,29 +102,67 @@ export function applyTarget(command, target) {
   return { changed, linked: hasHarnessBlock(target.path) };
 }
 
-async function main() {
-  const { command, scope } = parseArgs(process.argv);
+export async function collectConnectorLinks({ command = "status", scope = "project" } = {}) {
   const hosts = await detectHosts();
   const hostIds = hosts.mcpHosts;
   const mcpLinks = await mcpLinkedByHost(hostIds);
-
-  console.log(`connector command: ${command}`);
-  console.log(`scope: ${scope}`);
-  console.log(`detected MCP hosts: ${hostIds.join(", ") || "(none)"}`);
-  console.log("\n== connector links ==");
+  const rows = [];
 
   for (const hostId of hostIds) {
     const targets = targetsForScope(hostId, scope);
-    const mcpStatus = mcpLinks.get(hostId) ? "mcp:linked" : "mcp:missing";
+    const mcpLinked = Boolean(mcpLinks.get(hostId));
+    const mcpStatus = mcpLinked ? "linked" : "missing";
     if (targets.length === 0) {
-      console.log(`${hostId}: ${mcpStatus}; instruction:mcp-only`);
+      rows.push({
+        type: "connector",
+        hostId,
+        scope,
+        mcpStatus,
+        instructionStatus: "mcp-only",
+        path: null,
+        supported: true,
+      });
       continue;
     }
     for (const target of targets) {
       const result = applyTarget(command, target);
-      const action = command === "status" ? (result.linked ? "linked" : "missing") : result.changed ? "changed" : "no-op";
-      console.log(`${hostId}: ${mcpStatus}; instruction:${action}; ${target.path}`);
+      const instructionStatus =
+        command === "status" ? (result.linked ? "linked" : "missing") : result.changed ? "changed" : "no-op";
+      rows.push({
+        type: "connector",
+        hostId,
+        scope,
+        mcpStatus,
+        instructionStatus,
+        path: target.path,
+        supported: true,
+      });
     }
+  }
+
+  return { command, scope, hostIds, rows };
+}
+
+async function main() {
+  const { command, scope, json } = parseArgs(process.argv);
+  const result = await collectConnectorLinks({ command, scope });
+  if (json) {
+    console.log(JSON.stringify(result, null, 2));
+    return;
+  }
+
+  console.log(`connector command: ${command}`);
+  console.log(`scope: ${scope}`);
+  console.log(`detected MCP hosts: ${result.hostIds.join(", ") || "(none)"}`);
+  console.log("\n== connector links ==");
+
+  for (const row of result.rows) {
+    const mcpStatus = `mcp:${row.mcpStatus}`;
+    if (row.instructionStatus === "mcp-only") {
+      console.log(`${row.hostId}: ${mcpStatus}; instruction:mcp-only`);
+      continue;
+    }
+    console.log(`${row.hostId}: ${mcpStatus}; instruction:${row.instructionStatus}; ${row.path}`);
   }
 }
 
