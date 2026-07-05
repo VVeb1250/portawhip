@@ -14,6 +14,16 @@ const STOPWORDS = new Set([
   // — confirmed it drove a false positive on a prompt literally about
   // designing "a capability router" via the word "capability" alone.
   "capability", "capabilities",
+  // Same failure mode, different word: the "harness-router" recipe's own id
+  // tokenizes to "harness"+"router" and idText carries the highest field
+  // boost, so any meta-discussion prompt containing "router"/"routing"/
+  // "harness" scored a hit against this repo's own capability regardless of
+  // trigger list content. Entries are the STEMMED forms (stem() runs before
+  // this filter, and its naive suffix-stripping turns "routing" -> "rout"
+  // and "harness" -> "harnes" — stopwording the unstemmed word is a no-op).
+  // Stopwording forces a real match to come from a distinguishing word (a
+  // file name, "fix", "improve") instead.
+  "router", "route", "rout", "harnes", "harnesse",
 ]);
 
 function stem(token) {

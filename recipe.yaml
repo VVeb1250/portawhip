@@ -67,10 +67,11 @@
       [
         "harness-router",
         "portawhip",
-        "route precision",
-        "routing telemetry",
-        "capability router",
-        "router architecture",
+        "hybrid-router.mjs",
+        "sparse-retriever.mjs",
+        "router-cli.mjs",
+        "fix the router",
+        "improve the router",
       ]
     description: "Inspect or improve this repo's harness-router/portawhip routing source"
     when: [user_prompt]
