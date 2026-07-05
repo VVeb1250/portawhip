@@ -13,6 +13,7 @@ import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { homedir } from "node:os";
 import { fileURLToPath } from "node:url";
+import { readEnrichmentCache } from "./enrich.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(HERE, "..");
@@ -222,13 +223,20 @@ function runJsonCommand(candidates) {
   return { ok: false, error: lastError };
 }
 
-export async function discoverMcp() {
+export async function discoverMcp(enrichCachePath) {
   const { listInstalledServers } = await import("add-mcp");
+  const cache = enrichCachePath ? readEnrichmentCache(enrichCachePath) : {};
   const hosts = await listInstalledServers({ global: true });
   const seen = new Map();
   for (const host of hosts) {
     for (const server of host.servers ?? []) {
       if (seen.has(server.serverName)) continue;
+      // `router-cli enrich` (core/enrich.mjs) precomputes real triggers by
+      // connecting to the server and asking its own tools/list — a bare
+      // server name alone only ever matches a prompt that names the server
+      // literally. Falls back to the bare name when nothing's cached yet
+      // (unenriched behavior, unchanged).
+      const enriched = cache[server.serverName];
       seen.set(server.serverName, {
         id: server.serverName,
         type: "mcp",
@@ -236,8 +244,8 @@ export async function discoverMcp() {
         path: null,
         origin: "auto:mcp",
         route: {
-          triggers: [server.serverName],
-          description: `MCP server: ${server.serverName}`,
+          triggers: enriched?.triggers ?? [server.serverName],
+          description: enriched?.description ?? `MCP server: ${server.serverName}`,
           when: ["user_prompt"],
           inject: "hint",
         },
@@ -288,7 +296,7 @@ export function discoverSkills() {
   return [...seen.values()];
 }
 
-export function discoverCli() {
+export function discoverCli(enrichCachePath) {
   const result = spawnSync.sync("mise", ["ls", "--json"], { encoding: "utf8" });
   if (result.status !== 0) return [];
   let tools;
@@ -297,19 +305,23 @@ export function discoverCli() {
   } catch {
     return [];
   }
-  return Object.keys(tools).map((name) => ({
-    id: name,
-    type: "cli",
-    source: name,
-    path: null,
-    origin: "auto:cli",
-    route: {
-      triggers: [name],
-      description: `CLI tool: ${name}`,
-      when: ["user_prompt"],
-      inject: "hint",
-    },
-  }));
+  const cache = enrichCachePath ? readEnrichmentCache(enrichCachePath) : {};
+  return Object.keys(tools).map((name) => {
+    const enriched = cache[name];
+    return {
+      id: name,
+      type: "cli",
+      source: name,
+      path: null,
+      origin: "auto:cli",
+      route: {
+        triggers: enriched?.triggers ?? [name],
+        description: enriched?.description ?? `CLI tool: ${name}`,
+        when: ["user_prompt"],
+        inject: "hint",
+      },
+    };
+  });
 }
 
 export function discoverCommands(roots = defaultPluginRoots()) {
@@ -320,11 +332,11 @@ export function discoverAgents(roots = defaultPluginRoots()) {
   return discoverMarkdownSurface("agent", "agents", roots);
 }
 
-export async function discoverAll() {
+export async function discoverAll({ enrichCachePath } = {}) {
   const [mcp, skills, cli, commands, agents] = await Promise.all([
-    discoverMcp(),
+    discoverMcp(enrichCachePath),
     Promise.resolve(discoverSkills()),
-    Promise.resolve(discoverCli()),
+    Promise.resolve(discoverCli(enrichCachePath)),
     Promise.resolve(discoverCommands()),
     Promise.resolve(discoverAgents()),
   ]);

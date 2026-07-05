@@ -14,6 +14,12 @@ function cachePathFor(recipePath) {
   return join(dirname(resolve(recipePath)), ".hp-state", "route-index.json");
 }
 
+// Same anchoring as cachePathFor above — core/enrich.mjs writes here via
+// `router-cli enrich`, discover.mjs reads it back through discoverAll().
+function enrichCachePathFor(recipePath) {
+  return join(dirname(resolve(recipePath)), ".hp-state", "tool-descriptions.json");
+}
+
 function validateRoute(entry) {
   const r = entry.route;
   if (r === undefined) return null;
@@ -129,7 +135,9 @@ export async function buildIndex(recipePath = "recipe.yaml", { discover = true }
   const trustedPath = paths[paths.length - 1];
   const { byId, sourceById } = mergeWithProvenance(paths);
 
-  const discovered = discover ? await discoverAll() : [];
+  const discovered = discover
+    ? await discoverAll({ enrichCachePath: enrichCachePathFor(trustedPath) })
+    : [];
 
   // Bundle-sourced entries (foundry.yaml / recipes/roles/*.yaml) carry
   // curated route metadata but are NOT presumed installed just because a

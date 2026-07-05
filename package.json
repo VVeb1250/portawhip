@@ -19,12 +19,13 @@
     "bundles": "node scripts/bundles.mjs list",
     "bundles:status": "node scripts/bundles.mjs status",
     "bundles:select": "node scripts/bundles.mjs select",
-    "test": "node --test core/router.test.mjs core/feedback.test.mjs core/stack-detect.test.mjs core/concept-vector.test.mjs core/eval-harvest.test.mjs core/bundle-state.test.mjs scripts/link-hooks.test.mjs scripts/link-connectors.test.mjs adapters/hooks/universal-hook.test.mjs adapters/hooks/hook-stub.test.mjs",
+    "test": "node --test core/router.test.mjs core/feedback.test.mjs core/stack-detect.test.mjs core/concept-vector.test.mjs core/eval-harvest.test.mjs core/enrich.test.mjs core/bundle-state.test.mjs scripts/link-hooks.test.mjs scripts/link-connectors.test.mjs adapters/hooks/universal-hook.test.mjs adapters/hooks/hook-stub.test.mjs",
     "route": "node core/router-cli.mjs route",
     "route:list": "node core/router-cli.mjs list",
     "route:eval": "node core/router-cli.mjs eval --engine hybrid",
     "route:compare": "node core/router-cli.mjs compare",
-    "route:graph": "node core/router-cli.mjs graph-compile --out .hp-state/capability-graph.json"
+    "route:graph": "node core/router-cli.mjs graph-compile --out .hp-state/capability-graph.json",
+    "route:enrich": "node core/router-cli.mjs enrich"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",

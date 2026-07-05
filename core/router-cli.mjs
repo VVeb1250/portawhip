@@ -11,8 +11,9 @@ import { loadConfig } from "./config.mjs";
 import { computeFactors } from "./feedback.mjs";
 import { stackFactors, combineFactors } from "./stack-detect.mjs";
 import { harvestHardNegatives } from "./eval-harvest.mjs";
+import { runEnrichment } from "./enrich.mjs";
 import { readActiveSelection, resolveRecipePaths } from "./bundle-state.mjs";
-import { dirname, resolve } from "node:path";
+import { dirname, resolve, join } from "node:path";
 import { appendFileSync } from "node:fs";
 
 function parseArgs(argv) {
@@ -110,6 +111,25 @@ async function main() {
     return;
   }
 
+  if (command === "enrich") {
+    // Anchored to the same recipe.yaml directory as registry.mjs's own
+    // enrichCachePathFor - init/update-time only, never inside route()'s
+    // hot path (loadIndex() re-discovers on every prompt).
+    const feedbackRoot = dirname(resolve(primaryRecipe));
+    const cachePath = args.cachePath ?? join(feedbackRoot, ".hp-state", "tool-descriptions.json");
+    const timeoutMs = args.timeoutMs ? Number(args.timeoutMs) : undefined;
+    const result = await runEnrichment({ cachePath, timeoutMs });
+    console.log(
+      JSON.stringify({
+        status: "success",
+        cachePath,
+        enrichedCount: Object.keys(result).length,
+        enrichedIds: Object.keys(result),
+      }),
+    );
+    return;
+  }
+
   if (command === "harvest-negatives") {
     const evalPath = args.evalPath ?? "docs/router-eval-set.jsonl";
     const minIgnoredCount = args.minIgnoredCount ? Number(args.minIgnoredCount) : 2;
@@ -153,7 +173,7 @@ async function main() {
   }
 
   console.error(
-    `unknown command "${command}". Use "route", "eval", "compare", "harvest-negatives", "graph-compile", or "list".`,
+    `unknown command "${command}". Use "route", "eval", "compare", "enrich", "harvest-negatives", "graph-compile", or "list".`,
   );
   process.exitCode = 1;
 }

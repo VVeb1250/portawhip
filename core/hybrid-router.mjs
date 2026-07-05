@@ -29,6 +29,28 @@ const BROAD_TERMS = new Set([
   "test",
   "tool",
   "workflow",
+  // core/enrich.mjs (router-cli enrich) seeds MCP tool triggers from a
+  // server's own tools/list — sub-tool names conventionally follow a
+  // verb_noun pattern (push_files, create_pull_request, list_issues), so
+  // these generic CRUD verbs are now real trigger tokens for almost every
+  // enriched MCP tool. Found live: "compare push and pull routing modes for
+  // an agent harness" (a router-architecture question) matched github
+  // through "push"/"pull" alone with zero other overlap. Same
+  // weakKeywordOnly mechanism as the rest of this list — only suppresses a
+  // candidate when EVERY matched term is generic; a query that also shares
+  // a tool-specific word (e.g. "push files to my github repo") still
+  // passes untouched.
+  "push",
+  "pull",
+  "create",
+  "get",
+  "list",
+  "update",
+  "search",
+  "fetch",
+  "add",
+  "remove",
+  "delete",
 ]);
 
 function compactReason(item) {
