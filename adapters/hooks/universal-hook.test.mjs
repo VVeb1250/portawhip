@@ -1,23 +1,37 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { existsSync, rmSync, readFileSync } from "node:fs";
+import { existsSync, rmSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import { actionDirective } from "./universal-hook.mjs";
+import { actionDirective, resolveId } from "./universal-hook.mjs";
 
 // Integration-level: runs the real hook as a subprocess against this
 // repo's real recipe.yaml (same style as core/router.test.mjs's
 // discovery tests, which already exercise the live machine state).
 // Feedback events land in this repo's real .hp-state/feedback, so every
-// test clears it first/after to avoid cross-test and cross-run pollution.
-
+// test needs a clean slate to assert against - but a plain rm here was
+// found live (2026-07-06) to permanently delete real dogfood events
+// (this repo's own push-hook firing during actual use), the first time
+// this suite happened to run right after a real hook fire. Snapshot and
+// restore instead of deleting, so running tests never costs real history.
 const ROOT = dirname(dirname(dirname(fileURLToPath(import.meta.url))));
 const HOOK = join(ROOT, "adapters", "hooks", "universal-hook.mjs");
 const FEEDBACK_PATH = join(ROOT, ".hp-state", "feedback", "events.jsonl");
 
+let feedbackBackup;
+
 function clearFeedback() {
+  feedbackBackup = existsSync(FEEDBACK_PATH) ? readFileSync(FEEDBACK_PATH, "utf8") : null;
   if (existsSync(FEEDBACK_PATH)) rmSync(FEEDBACK_PATH);
+}
+
+function restoreFeedback() {
+  if (existsSync(FEEDBACK_PATH)) rmSync(FEEDBACK_PATH);
+  if (feedbackBackup != null) {
+    mkdirSync(dirname(FEEDBACK_PATH), { recursive: true });
+    writeFileSync(FEEDBACK_PATH, feedbackBackup);
+  }
 }
 
 function runHook(args, payload) {
@@ -41,7 +55,7 @@ test("universal-hook: user_prompt emits additionalContext on a confident match",
     assert.equal(parsed.hookSpecificOutput.hookEventName, "UserPromptSubmit");
     assert.ok(parsed.hookSpecificOutput.additionalContext.includes("ripgrep"));
   } finally {
-    clearFeedback();
+    restoreFeedback();
   }
 });
 
@@ -54,7 +68,7 @@ test("universal-hook: user_prompt stays silent on a short/unrelated prompt", () 
     );
     assert.equal(stdout, "");
   } finally {
-    clearFeedback();
+    restoreFeedback();
   }
 });
 
@@ -68,7 +82,7 @@ test("universal-hook: gemini-cli defaults hookEventName to BeforeAgent when no n
     const parsed = JSON.parse(stdout);
     assert.equal(parsed.hookSpecificOutput.hookEventName, "BeforeAgent");
   } finally {
-    clearFeedback();
+    restoreFeedback();
   }
 });
 
@@ -106,6 +120,33 @@ test("actionDirective: cli surfaces the pointer as a runnable command", () => {
   assert.match(directive, /mise exec -- ripgrep/);
 });
 
+test("resolveId: a CLI binary name with a regex metacharacter still matches its own command", () => {
+  // "." is unescaped-regex "any character" - a dot-containing name sitting
+  // between word characters (unlike a trailing "g++") still hits \b on
+  // both sides, so this exercises the escaping fix without the separate,
+  // pre-existing \b-at-a-symbol-edge limitation (word boundaries don't
+  // fire between two non-word characters, e.g. "+" then a space - a
+  // different, lower-priority gap left as-is since no registered CLI name
+  // ends in a symbol today).
+  const index = {
+    entries: [{ id: "foo-dot-bar", type: "cli", source: "foo.bar", route: {} }],
+  };
+  assert.doesNotThrow(() => {
+    const id = resolveId(index, "Bash", { command: "foo.bar --version" });
+    assert.equal(id, "foo-dot-bar");
+  });
+});
+
+test("resolveId: an unescaped '.' would false-match a lookalike command; escaped it does not", () => {
+  const index = {
+    entries: [{ id: "foo-dot-bar", type: "cli", source: "foo.bar", route: {} }],
+  };
+  // Unescaped, "." in the regex means "any character" - "fooXbar" would
+  // wrongly match a binary named "foo.bar". Escaped, it correctly doesn't.
+  const id = resolveId(index, "Bash", { command: "run fooXbar now" });
+  assert.equal(id, null);
+});
+
 test("universal-hook: post_tool with an mcp__<id>__ tool name logs a used event for that id", () => {
   clearFeedback();
   try {
@@ -118,6 +159,6 @@ test("universal-hook: post_tool with an mcp__<id>__ tool name logs a used event 
     assert.ok(contents.includes('"type":"used"'));
     assert.ok(contents.includes('"id":"context7"'));
   } finally {
-    clearFeedback();
+    restoreFeedback();
   }
 });

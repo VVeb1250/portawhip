@@ -118,7 +118,11 @@ function outputAdditionalContext(host, nativeEvent, additionalContext) {
   };
 }
 
-function resolveId(index, toolName, toolInput) {
+function escapeRegExp(text) {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+export function resolveId(index, toolName, toolInput) {
   const mcpMatch = /^mcp[_]{1,2}([^_]+)[_]{1,2}/.exec(toolName || "");
   if (mcpMatch) {
     const id = mcpMatch[1];
@@ -136,10 +140,16 @@ function resolveId(index, toolName, toolInput) {
 
   if (["Bash", "run_shell_command", "bash"].includes(toolName)) {
     const command = toolInput?.command || toolInput?.cmd || "";
+    // name comes from the registry (route.binary/source), not the tool call
+    // itself, but a CLI binary name can still contain regex metacharacters
+    // (e.g. "g++") - unescaped, that either throws (an uncaught exception
+    // here propagates out of postTool(), silently disabling pull-mode
+    // matching for every entry, not just this one - main() fails open with
+    // an empty catch) or matches something nonsensical.
     const hit = index.entries.find((e) => {
       if (e.type !== "cli") return false;
       const name = e.route?.binary ?? e.source;
-      return name && new RegExp(`\\b${name}\\b`, "i").test(command);
+      return name && new RegExp(`\\b${escapeRegExp(name)}\\b`, "i").test(command);
     });
     return hit?.id ?? null;
   }
