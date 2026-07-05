@@ -4,6 +4,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, rmSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
+import { actionDirective } from "./universal-hook.mjs";
 
 // Integration-level: runs the real hook as a subprocess against this
 // repo's real recipe.yaml (same style as core/router.test.mjs's
@@ -69,6 +70,40 @@ test("universal-hook: gemini-cli defaults hookEventName to BeforeAgent when no n
   } finally {
     clearFeedback();
   }
+});
+
+test("actionDirective: skill on claude-code names the Skill tool by id", () => {
+  const directive = actionDirective({ kind: "skill", id: "workspace-surface-audit", pointer: "/some/path" }, "claude-code");
+  assert.match(directive, /Skill tool/);
+  assert.match(directive, /"workspace-surface-audit"/);
+});
+
+test("actionDirective: skill on a non-claude-code host falls back to reading the pointer", () => {
+  const directive = actionDirective({ kind: "skill", id: "workspace-surface-audit", pointer: "/some/path" }, "gemini-cli");
+  assert.doesNotMatch(directive, /Skill tool/);
+  assert.match(directive, /\/some\/path/);
+});
+
+test("actionDirective: mcp on claude-code gives the mcp__<id>__ prefix and a ToolSearch fallback", () => {
+  const directive = actionDirective({ kind: "tool", type: "mcp", id: "playwright", pointer: "@playwright/mcp@latest" }, "claude-code");
+  assert.match(directive, /mcp__playwright__/);
+  assert.match(directive, /ToolSearch/);
+});
+
+test("actionDirective: mcp on a non-claude-code host stays generic, no invented syntax", () => {
+  const directive = actionDirective({ kind: "tool", type: "mcp", id: "playwright", pointer: "@playwright/mcp@latest" }, "codex");
+  assert.doesNotMatch(directive, /mcp__/);
+});
+
+test("actionDirective: agent on claude-code names the Agent tool by subagent_type", () => {
+  const directive = actionDirective({ kind: "agent", id: "e2e-runner", pointer: "/agents/e2e-runner.md" }, "claude-code");
+  assert.match(directive, /Agent tool/);
+  assert.match(directive, /"e2e-runner"/);
+});
+
+test("actionDirective: cli surfaces the pointer as a runnable command", () => {
+  const directive = actionDirective({ kind: "tool", type: "cli", id: "ripgrep", pointer: "mise exec -- ripgrep" }, "claude-code");
+  assert.match(directive, /mise exec -- ripgrep/);
 });
 
 test("universal-hook: post_tool with an mcp__<id>__ tool name logs a used event for that id", () => {

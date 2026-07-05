@@ -64,11 +64,43 @@ function readinessNote(hit, cwd) {
   return ready ? "" : ` (not set up here - run \`${hit.readyHint ?? "see docs"}\`)`;
 }
 
-function formatBlock(result, budgetChars, cwd) {
+// A bare pointer alone doesn't get acted on. Verified live (2026-07-06):
+// this repo's own push hook correctly suggested workspace-surface-audit and
+// configure-ecc on every turn of a session about diagnosing this project's
+// own hooks — genuinely relevant — and neither was ever invoked. The
+// rendered line gave a bare path/name with no invocation syntax, so it read
+// as background info, not a directive. adapters/instructions/generate.mjs
+// already proved the fix for the sibling problem (route() itself never
+// being called): be maximally explicit and host-aware, not more
+// descriptive. Same principle here, generic over kind/host — never a
+// specific tool name hardcoded, so this scales to whatever the caller has
+// installed.
+export function actionDirective(hit, host) {
+  if (hit.kind === "skill") {
+    return host === "claude-code"
+      ? `invoke now via the Skill tool (skill: "${hit.id}")`
+      : `read and follow this skill's instructions now: ${hit.pointer}`;
+  }
+  if (hit.kind === "agent") {
+    return host === "claude-code"
+      ? `delegate now via the Agent tool (subagent_type: "${hit.id}")`
+      : `use this agent capability now if relevant: ${hit.pointer}`;
+  }
+  if (hit.type === "mcp") {
+    return host === "claude-code"
+      ? `call its MCP tool directly now (tool names start with "mcp__${hit.id}__"; if not shown as callable yet, call ToolSearch with query "${hit.id}" first)`
+      : `call this MCP tool directly now if relevant`;
+  }
+  // cli (and any other pointer-bearing type): the pointer is already a
+  // runnable shell command - see capability-docs.mjs's pointerFor.
+  return `run it directly now: ${hit.pointer}`;
+}
+
+function formatBlock(result, budgetChars, cwd, host) {
   const lines = [];
   let used = 0;
   for (const hit of result) {
-    const line = `- ${hit.id} - ${hit.how_to_use}${readinessNote(hit, cwd)} - ${hit.pointer}`;
+    const line = `- ${hit.id} - ${hit.how_to_use}${readinessNote(hit, cwd)} - ${actionDirective(hit, host)}`;
     if (used + line.length > budgetChars && lines.length > 0) break;
     lines.push(line);
     used += line.length;
@@ -134,7 +166,7 @@ async function userPrompt(payload, args) {
   const result = runRoute(index, prompt, { ...config, graphPath, factors });
   if (!result || result.length === 0) return;
 
-  const block = formatBlock(result, config.pushBudgetChars, payloadCwd(payload));
+  const block = formatBlock(result, config.pushBudgetChars, payloadCwd(payload), args.host);
   if (!block) return;
 
   for (const hit of result) {
