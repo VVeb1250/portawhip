@@ -12,7 +12,9 @@ Two halves:
    dispatched to whichever backend already solves that install problem well
    (`add-mcp` for MCP servers, `mise` for CLI tools, `agent-skill-manager`
    for skills). No install logic of its own, no hardcoded host list.
-2. **Router** — a hybrid keyword/lexical retrieval engine over both curated
+2. **Router** — a hybrid lexical + dense-semantic retrieval engine (the
+   semantic channel runs on a local embedding model that downloads and
+   caches itself on first use, no manual setup) over both curated
    (`recipe.yaml`) and live auto-discovered capabilities, exposed 3 ways:
    pull (`harness-router` MCP server), push (a native hook that suggests
    capabilities inline as you type), and CLI. Usage feedback (was a
@@ -53,11 +55,36 @@ files yourself before running against global scope for the first time.
 node core/router-cli.mjs route --prompt "convert this pdf to text"
 node core/router-cli.mjs list --type skill
 npm run route:eval        # regression eval against docs/router-eval-set.jsonl
-npm test                  # 39 unit/integration tests
+npm run sync-config       # status for delegated config-sync backends
+npm run sync-config:preview -- --backend ai-config-sync
+npm run sync-config:preview -- --profile ai-project-instructions
+npm test                  # unit/integration tests
 ```
 
 Or let a connected agent host call the `harness-router` MCP server's
 `route(query)` / `list_all(type?)` tools directly.
+
+## Config Sync
+
+`scripts/sync-config.mjs` is a thin facade over existing sync backends. It
+does not reconcile host files itself:
+
+- `ai-config-sync-manager` for Claude Code ↔ Codex drift, preview, and apply.
+- `agent-skill-manager` as the current skill-provider probe backend.
+- `@agents-dev/cli` (`.agents`) as an optional source-of-truth sync probe for
+  broader host coverage.
+
+Default commands are read-only or dry-run. Writes require
+`node scripts/sync-config.mjs apply --apply` plus a narrow `--include` or
+`--profile`; broad all-area apply and all-skills apply are blocked.
+
+Built-in profiles:
+
+- `ai-project-instructions` — project-scope Claude/Codex instructions only.
+- `ai-global-instructions` — global Claude/Codex instructions only.
+- `ai-project-mcp` — project-scope MCP only.
+- `asm-status` — agent-skill-manager provider probe.
+- `agents-check` — `.agents` source-of-truth status/check.
 
 ## Status
 

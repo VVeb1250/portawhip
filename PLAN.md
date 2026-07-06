@@ -247,6 +247,16 @@ capability graph used by the router.
 ignored 5× in a row visibly drops rank in `router-cli route` output.
 **Exit criteria:** end-to-end demo documented in `docs/phase4-verify.md`.
 
+**Status 2026-07-06:** complete, including item 3 (dense embeddings —
+`docs/phase4-verify.md` said "not attempted" as of 2026-07-04; superseded).
+`core/dense-embedder.mjs` — BAAI/bge-m3 via `@huggingface/transformers`,
+zero manual setup (model downloads/caches itself on first use). Fused as a
+second, additive channel into the existing lane/peakedness-gate pipeline
+(`core/hybrid-router.mjs`), on by default for the MCP server/CLI; the push
+hook opts out (fresh subprocess per prompt can't amortize a 500MB+ model
+load). Full eval now precisionAt1/recallAt3/mrr/abstainAccuracy all 1.0,
+falsePositiveCount 0 — see `HANDOFF.md` for the calibration story.
+
 ## 6. Out of scope (v1)
 
 - Rebuilding installation logic (step 1 owns it).
