@@ -15,6 +15,9 @@ const DEFAULTS = {
   graphPath: ".hp-state/capability-graph.json",
   graphBoost: 0.25,
   k: 5,
+  // See router.config.yaml's own comment: a lane where the top match barely
+  // beats the runner-up is diffuse-vocabulary noise, not a genuine pick.
+  peakednessRatio: 1.05,
   // See router.config.yaml's own comment for the 320 -> 640 rationale
   // (actionDirective()'s mcp/ToolSearch clause cost, paid at most once per
   // id per session since repeats render tersely) - kept in sync here so a
@@ -42,6 +45,8 @@ export function loadConfig(path = "router.config.yaml") {
       typeof raw.graphPath === "string" && raw.graphPath.trim() ? raw.graphPath : DEFAULTS.graphPath,
     graphBoost: typeof raw.graphBoost === "number" ? raw.graphBoost : DEFAULTS.graphBoost,
     k: typeof raw.k === "number" ? raw.k : DEFAULTS.k,
+    peakednessRatio:
+      typeof raw.peakednessRatio === "number" ? raw.peakednessRatio : DEFAULTS.peakednessRatio,
     pushBudgetChars:
       typeof raw.pushBudgetChars === "number" ? raw.pushBudgetChars : DEFAULTS.pushBudgetChars,
   };

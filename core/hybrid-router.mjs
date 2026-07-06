@@ -53,6 +53,22 @@ const BROAD_TERMS = new Set([
   "delete",
 ]);
 
+// A lane where the top match barely beats the runner-up is diffuse-vocabulary
+// noise, not a genuine pick — verified against docs/router-eval-set.jsonl's
+// one remaining false positive: "what context signals should a router
+// observe before injecting a skill" scores example-skill and
+// skill-development within 0.3% of each other (both lit up by the same
+// generic "router"/"skill"/"injecting" words), while every real match in the
+// set has a clear top pick with no close runner-up. A lane with only one
+// surviving candidate is never penalized (nothing to be tied with).
+function dropIfDiffuse(laneCandidates, ratio) {
+  if (laneCandidates.length < 2) return laneCandidates;
+  const sorted = [...laneCandidates].sort((a, b) => b.score - a.score);
+  const [top, runnerUp] = sorted;
+  if (runnerUp.score <= 0 || top.score / runnerUp.score >= ratio) return laneCandidates;
+  return [];
+}
+
 function compactReason(item) {
   const terms = (item.terms ?? []).slice(0, 5);
   if (item.graphBoosted) {
@@ -124,6 +140,7 @@ export function routeHybrid(
     suggest = "any",
     factors = null,
     includeWeak = false,
+    peakednessRatio = 1.05,
   } = {},
 ) {
   const docs = buildCapabilityDocs(index);
@@ -195,7 +212,7 @@ export function routeHybrid(
     lanes.get(kind).push(candidate);
   }
   const laneWinners = [...lanes.values()].flatMap((laneCandidates) =>
-    reciprocalRankFusion([laneCandidates]).slice(0, k),
+    reciprocalRankFusion([dropIfDiffuse(laneCandidates, peakednessRatio)]).slice(0, k),
   );
   const fused = laneWinners.sort(
     (a, b) => (b.score ?? 0) - (a.score ?? 0) || a.doc.id.localeCompare(b.doc.id),

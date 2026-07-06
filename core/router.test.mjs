@@ -340,6 +340,48 @@ test("hybrid: tool and skill lanes don't crowd each other out of a shared k", ()
   assert.ok(result.some((r) => r.id === "pdf-tool"), "tool lane must not be crowded out");
 });
 
+test("hybrid: a lane where the top match barely beats the runner-up is silenced as diffuse noise", () => {
+  // Two docs sharing identical generic triggers score exactly tied (ratio
+  // 1.0) — the same shape as the real remaining false positive (example-skill
+  // vs skill-development both lit up by "router"/"skill"/"injecting").
+  const index = {
+    entries: [
+      {
+        id: "skill-a",
+        type: "skill",
+        origin: "auto:skill",
+        path: "/skills/skill-a",
+        route: { triggers: ["architecture", "pattern"], description: "Skill A" },
+      },
+      {
+        id: "skill-b",
+        type: "skill",
+        origin: "auto:skill",
+        path: "/skills/skill-b",
+        route: { triggers: ["architecture", "pattern"], description: "Skill B" },
+      },
+    ],
+  };
+  const result = routeHybrid(index, "architecture pattern", { hybridThreshold: 0.01, k: 5 });
+  assert.equal(result.length, 0, "near-tied scores in a lane should be silenced, not guessed");
+});
+
+test("hybrid: a single dominant match in a lane still fires even with no competing runner-up", () => {
+  const index = {
+    entries: [
+      {
+        id: "pdf-skill",
+        type: "skill",
+        origin: "auto:skill",
+        path: "/skills/pdf-skill",
+        route: { triggers: ["pdf"], description: "PDF skill" },
+      },
+    ],
+  };
+  const result = routeHybrid(index, "pdf", { hybridThreshold: 0.01, k: 5 });
+  assert.ok(result.some((r) => r.id === "pdf-skill"));
+});
+
 test("hybrid: capability docs enrich skills from SKILL metadata without bloating results", () => {
   const index = {
     entries: [

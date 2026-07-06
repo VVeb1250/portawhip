@@ -39,6 +39,21 @@ hybridToolThreshold: 80
 graphPath: .hp-state/capability-graph.json
 graphBoost: 0.25
 k: 5
+# A lane (skill or tool) where the top match barely beats the runner-up is
+# diffuse-vocabulary noise, not a genuine pick - verified against the last
+# remaining false positive in docs/router-eval-set.jsonl: "what context
+# signals should a router observe before injecting a skill" scores
+# example-skill and skill-development within 0.3% of each other (both lit up
+# by the same generic "router"/"skill"/"injecting" words shared across
+# hundreds of skill docs), while every genuine match in the eval set has a
+# clear top pick with no close runner-up. Swept 1.05/1.08/1.12 against the
+# full eval set - all three give the same result (a plateau, not a knife's
+# edge), so 1.05 is not a fragile fit to one prompt. Confirmed this doesn't
+# fix everything: it's a geometry-of-scores fix, so it can't separate a
+# genuinely peaked-but-wrong match (a doc that's confidently, unambiguously
+# the top hit yet still the wrong one) - that needs a semantic signal
+# (planned: PLAN.md Phase 4's local embedding model), not a sharper number.
+peakednessRatio: 1.05
 # Phase 3 push-mode hook: hard char budget per injected suggestion block
 # (proxy for tokens — no tokenizer dependency for this). Lines are added
 # until the next one would exceed this, so it degrades to fewer/shorter
