@@ -7,14 +7,14 @@
 import { route } from "./scorer.mjs";
 import { routeHybrid } from "./hybrid-router.mjs";
 
-export function runRoute(index, prompt, config) {
-  return config.engine === "hybrid" ? routeHybrid(index, prompt, config) : route(index, prompt, config);
+export async function runRoute(index, prompt, config) {
+  return config.engine === "hybrid" ? await routeHybrid(index, prompt, config) : route(index, prompt, config);
 }
 
-export function explainRoute(index, prompt, config) {
+export async function explainRoute(index, prompt, config) {
   const startedAt = Date.now();
   const all = config.engine === "hybrid"
-    ? routeHybrid(index, prompt, { ...config, includeWeak: true })
+    ? await routeHybrid(index, prompt, { ...config, includeWeak: true })
     : route(index, prompt, config);
   const results = all.filter((item) => item.tier === "required" || item.tier === "recommended");
   const suppressed = all.filter((item) => item.tier !== "required" && item.tier !== "recommended");

@@ -29,12 +29,12 @@ function publicKindMetrics(metrics) {
   };
 }
 
-export function runRouterEval(index, config, { evalPath, engine = "hybrid", suggest = "any" } = {}) {
+export async function runRouterEval(index, config, { evalPath, engine = "hybrid", suggest = "any" } = {}) {
   const cases = loadEvalSet(evalPath);
   const routeFn =
     engine === "keyword"
-      ? (prompt, caseSuggest) => route(index, prompt, { ...config, suggest: caseSuggest })
-      : (prompt, caseSuggest) => routeHybrid(index, prompt, { ...config, suggest: caseSuggest });
+      ? async (prompt, caseSuggest) => route(index, prompt, { ...config, suggest: caseSuggest })
+      : async (prompt, caseSuggest) => routeHybrid(index, prompt, { ...config, suggest: caseSuggest });
 
   const failures = [];
   let positiveCount = 0;
@@ -48,7 +48,7 @@ export function runRouterEval(index, config, { evalPath, engine = "hybrid", sugg
 
   for (const testCase of cases) {
     const testSuggest = testCase.suggest ?? suggest;
-    const results = routeFn(testCase.prompt, testSuggest);
+    const results = await routeFn(testCase.prompt, testSuggest);
     const ids = results.map((result) => result.id);
     if (testCase.shouldRoute) {
       positiveCount += 1;
@@ -121,13 +121,13 @@ export function runRouterEval(index, config, { evalPath, engine = "hybrid", sugg
   };
 }
 
-export function runRouterEvalComparison(index, config, { evalPath, suggest = "any" } = {}) {
-  const keyword = runRouterEval(index, config, {
+export async function runRouterEvalComparison(index, config, { evalPath, suggest = "any" } = {}) {
+  const keyword = await runRouterEval(index, config, {
     evalPath,
     engine: "keyword",
     suggest,
   });
-  const hybrid = runRouterEval(index, config, {
+  const hybrid = await runRouterEval(index, config, {
     evalPath,
     engine: "hybrid",
     suggest,

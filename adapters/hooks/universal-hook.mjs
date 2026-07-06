@@ -193,7 +193,12 @@ async function userPrompt(payload, args) {
   const graphPath =
     config.graphPath && !isAbsolute(config.graphPath) ? join(ROOT, config.graphPath) : config.graphPath;
   const factors = combineFactors(computeFactors(ROOT), stackFactors(index, payloadCwd(payload)));
-  const result = runRoute(index, prompt, { ...config, graphPath, factors });
+  // Dense retrieval (core/dense-embedder.mjs) loads a 500MB+ model on first
+  // use - fine for the long-lived MCP server/CLI, but this hook is a fresh
+  // subprocess per prompt (see hook-stub.mjs), so it would pay that cold
+  // load on every keystroke. Push mode stays sparse+peakedness-gate only;
+  // dense is opt-in for callers that can amortize the load across calls.
+  const result = await runRoute(index, prompt, { ...config, graphPath, factors, denseEnabled: false });
   if (!result || result.length === 0) return;
 
   const alreadySuggestedIds = sessionSuggestedIds(ROOT, payload.session_id ?? null);

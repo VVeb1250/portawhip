@@ -2,6 +2,7 @@ import { buildCapabilityDocs } from "./capability-docs.mjs";
 import { expandWithGraph, loadCapabilityGraph } from "./capability-graph.mjs";
 import { capabilityKind, matchesSuggestKind } from "./capability-kind.mjs";
 import { actionAlignmentFactor } from "./concept-vector.mjs";
+import { denseRetrieve } from "./dense-embedder.mjs";
 import { reciprocalRankFusion } from "./fusion.mjs";
 import { sparseRetrieve } from "./sparse-retriever.mjs";
 
@@ -126,7 +127,7 @@ function formatResult(item, bar) {
   };
 }
 
-export function routeHybrid(
+export async function routeHybrid(
   index,
   prompt,
   {
@@ -141,6 +142,8 @@ export function routeHybrid(
     factors = null,
     includeWeak = false,
     peakednessRatio = 1.05,
+    denseEnabled = true,
+    denseThreshold = 0.6,
   } = {},
 ) {
   const docs = buildCapabilityDocs(index);
@@ -165,8 +168,13 @@ export function routeHybrid(
   // "use <tool>" matches (exa/github/playwright tools).
   const toolBar = hybridToolThreshold ?? Math.min(autoBar, 80);
   const minScore = Math.min(autoBar, recipeBar, toolBar);
+  // No early-return on an empty sparse hit list: a genuine paraphrase can
+  // share zero lexical vocabulary with any doc field at all, and dense
+  // retrieval below runs independently of minisearch - exiting here would
+  // deny it the one case it exists to rescue. Graph expansion/candidate
+  // building all handle an empty seed list fine already (see "hybrid graph:
+  // abstains when retrieval has no seed").
   const sparse = sparseRetrieve(docs, prompt, { k: Math.max(k * 4, 20), minScore });
-  if (sparse.length === 0) return [];
 
   const graph = loadCapabilityGraph(graphPath);
   const expanded = expandWithGraph(sparse, docs, graph, { boost: graphBoost }).map((candidate) => ({
@@ -188,16 +196,41 @@ export function routeHybrid(
     const bar = candidate.doc.origin === "recipe" ? recipeBar : isTool ? toolBar : autoBar;
     return candidate.score >= bar && classifyCandidate(candidate, bar).tier !== "irrelevant_but_keyword_matched";
   });
-  if (filtered.length === 0) {
+
+  // Dense retrieval (core/dense-embedder.mjs, BGE-M3) is a second,
+  // meaning-based channel additive to the lexical one above - it runs
+  // regardless of what sparse found, so a genuine paraphrase with little or
+  // no shared vocabulary (the gap margin-gate/threshold tuning on lexical
+  // scores alone provably cannot close - see docs/router-eval-set.jsonl's
+  // e2e-testing miss) still gets a chance. Fails soft to [] whenever the
+  // model isn't installed/reachable or a caller opts out (push hook does -
+  // see universal-hook.mjs - a fresh process per keystroke can't amortize a
+  // 500MB+ model load), so every caller sees identical output to before
+  // whenever dense doesn't contribute. minScore:0 is deliberate - the real
+  // gate is `bar` below, applied after factors/actionAlignment, the same
+  // two-stage "loose net, then precise bar" shape the lexical path above
+  // already uses.
+  const filteredIds = new Set(filtered.map((candidate) => candidate.doc.id));
+  let denseOnly = [];
+  if (denseEnabled) {
+    const denseHits = await denseRetrieve(docs, prompt, { k: Math.max(k * 4, 20), minScore: 0 });
+    denseOnly = denseHits
+      .filter((hit) => matchesSuggestKind(hit.doc.type, suggest) && !filteredIds.has(hit.id))
+      .map((hit) => ({
+        ...hit,
+        score: hit.score * (factors?.get(hit.doc.id) ?? 1.0) * actionAlignmentFactor(hit.doc, prompt),
+        bar: denseThreshold,
+        terms: [],
+      }))
+      .filter((hit) => hit.score >= denseThreshold);
+  }
+
+  const candidatesForLanes = [...filtered, ...denseOnly];
+  if (candidatesForLanes.length === 0) {
     if (!includeWeak) return [];
     return candidates.slice(0, k).map((candidate) => formatResult(candidate, candidate.bar));
   }
 
-  // Phase 2.5 starts with one retrieval channel (core/concept-vector.mjs's
-  // actionAlignmentFactor is folded into the score above, not fused as a
-  // second ranking — see that file for why). Keeping fusion in the path
-  // makes dense embeddings and bounded graph expansion additive later.
-  //
   // Tools and skills get their own reserved k slots, not one shared slice.
   // Found live: real callers (push hook, MCP route tool, router-cli route)
   // all call with suggest:"any", so a query where BOTH a skill and a tool
@@ -206,7 +239,7 @@ export function routeHybrid(
   // versa) out of the result entirely, even though a task usually wants
   // both side by side (the tool to do it, the skill for how to do it well).
   const lanes = new Map();
-  for (const candidate of filtered) {
+  for (const candidate of candidatesForLanes) {
     const kind = capabilityKind(candidate.doc.type);
     if (!lanes.has(kind)) lanes.set(kind, []);
     lanes.get(kind).push(candidate);

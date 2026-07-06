@@ -46,7 +46,7 @@ server.tool(
     const graphPath =
       config.graphPath && !isAbsolute(config.graphPath) ? join(ROOT, config.graphPath) : config.graphPath;
     const factors = combineFactors(computeFactors(ROOT), stackFactors(index, process.cwd()));
-    const result = explainRoute(index, query, { ...config, graphPath, k: k ?? config.k, factors });
+    const result = await explainRoute(index, query, { ...config, graphPath, k: k ?? config.k, factors });
     logEvent(ROOT, {
       type: "route",
       engine: config.engine,

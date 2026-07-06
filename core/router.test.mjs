@@ -5,6 +5,7 @@ import { compileCapabilityGraph } from "./capability-graph-compiler.mjs";
 import { route, listAll, scoreEntry } from "./scorer.mjs";
 import { buildCapabilityDocs } from "./capability-docs.mjs";
 import { routeHybrid } from "./hybrid-router.mjs";
+import { _setPipelineForTest, _forceUnavailableForTest } from "./dense-embedder.mjs";
 import { explainRoute } from "./route-entry.mjs";
 import { loadConfig } from "./config.mjs";
 import { CONNECTOR_TARGETS, targetsForHost } from "./connector-targets.mjs";
@@ -16,7 +17,11 @@ import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-const CONFIG = loadConfig();
+// denseEnabled:false - these tests must stay fast, deterministic, and
+// offline; real dense retrieval (core/dense-embedder.mjs) needs network and
+// a 500MB+ model load on first use. Dense fusion itself gets its own test
+// with an injected fake pipeline (see "hybrid: dense-only" below).
+const CONFIG = { ...loadConfig(), denseEnabled: false };
 
 function tempRoot(prefix = "harness-router-") {
   return mkdtempSync(join(tmpdir(), prefix));
@@ -55,7 +60,7 @@ test("route: relevant prompt returns the matching entry, not others", async () =
 
 test("explainRoute: returns actionable results plus structured route metadata", async () => {
   const index = await buildIndex("recipe.yaml", { discover: false });
-  const result = explainRoute(index, "how do I extract a table from this pdf", CONFIG);
+  const result = await explainRoute(index, "how do I extract a table from this pdf", CONFIG);
   assert.equal(result.status, "success");
   assert.equal(result.results[0].id, "pdf");
   assert.equal(result.results[0].tier, "required");
@@ -65,7 +70,7 @@ test("explainRoute: returns actionable results plus structured route metadata", 
 
 test("explainRoute: empty result includes negative evidence", async () => {
   const index = await buildIndex("recipe.yaml", { discover: false });
-  const result = explainRoute(index, "what's the capital of France", CONFIG);
+  const result = await explainRoute(index, "what's the capital of France", CONFIG);
   assert.equal(result.status, "empty");
   assert.deepEqual(result.results, []);
   assert.equal(result.negative_evidence.result, "empty");
@@ -74,14 +79,14 @@ test("explainRoute: empty result includes negative evidence", async () => {
 
 test("curated aliases: harness audit routes to workspace surface audit", async () => {
   const index = await buildIndex("recipe.yaml", { discover: false });
-  const result = explainRoute(index, "audit connector hook find bugs in harness config", CONFIG);
+  const result = await explainRoute(index, "audit connector hook find bugs in harness config", CONFIG);
   assert.equal(result.results[0].id, "workspace-surface-audit");
   assert.equal(result.results[0].action, "read_skill");
 });
 
 test("curated aliases: fix-test-commit routes to review and verification", async () => {
   const index = await buildIndex("recipe.yaml", { discover: false });
-  const result = explainRoute(index, "fix bug run tests and commit after code review", CONFIG);
+  const result = await explainRoute(index, "fix bug run tests and commit after code review", CONFIG);
   const ids = result.results.map((hit) => hit.id);
   assert.equal(ids[0], "code-review");
   assert.ok(ids.includes("verification-loop"));
@@ -89,7 +94,7 @@ test("curated aliases: fix-test-commit routes to review and verification", async
 
 test("curated aliases: settings hook repair routes to configure-ecc", async () => {
   const index = await buildIndex("recipe.yaml", { discover: false });
-  const result = explainRoute(index, "fix settings.json hook for Claude Code config", CONFIG);
+  const result = await explainRoute(index, "fix settings.json hook for Claude Code config", CONFIG);
   assert.equal(result.results[0].id, "configure-ecc");
   assert.equal(result.results[0].action, "read_skill");
 });
@@ -199,7 +204,7 @@ test("budget: how_to_use string stays short (hint, not full content)", async () 
   }
 });
 
-test("hybrid: hyphenated ids match natural spaced phrasing", () => {
+test("hybrid: hyphenated ids match natural spaced phrasing", async () => {
   const index = {
     entries: [
       {
@@ -214,14 +219,15 @@ test("hybrid: hyphenated ids match natural spaced phrasing", () => {
       },
     ],
   };
-  const result = routeHybrid(index, "walk me through a zero-downtime database migration", {
+  const result = await routeHybrid(index, "walk me through a zero-downtime database migration", {
     hybridThreshold: 2,
     k: 5,
+    denseEnabled: false,
   });
   assert.equal(result[0].id, "database-migrations");
 });
 
-test("hybrid: token sequence matching does not match inside longer words", () => {
+test("hybrid: token sequence matching does not match inside longer words", async () => {
   const index = {
     entries: [
       {
@@ -236,14 +242,15 @@ test("hybrid: token sequence matching does not match inside longer words", () =>
       },
     ],
   };
-  const result = routeHybrid(index, "what's the capital of France", {
+  const result = await routeHybrid(index, "what's the capital of France", {
     hybridThreshold: 2,
     k: 5,
+    denseEnabled: false,
   });
   assert.deepEqual(result, []);
 });
 
-test("hybrid: broad vocabulary matches are suppressed as keyword-only noise", () => {
+test("hybrid: broad vocabulary matches are suppressed as keyword-only noise", async () => {
   const index = {
     entries: [
       {
@@ -258,16 +265,17 @@ test("hybrid: broad vocabulary matches are suppressed as keyword-only noise", ()
       },
     ],
   };
-  const result = routeHybrid(index, "router architecture", {
+  const result = await routeHybrid(index, "router architecture", {
     hybridThreshold: 0.01,
     includeWeak: true,
     k: 5,
+    denseEnabled: false,
   });
   assert.equal(result[0].tier, "irrelevant_but_keyword_matched");
   assert.equal(result[0].action, "ignore_by_default");
 });
 
-test("hybrid: suggest filters split skills from tools", () => {
+test("hybrid: suggest filters split skills from tools", async () => {
   const index = {
     entries: [
       {
@@ -295,15 +303,15 @@ test("hybrid: suggest filters split skills from tools", () => {
   // threshold near 0: this fixture's only purpose is testing suggest-kind
   // filtering, not score calibration — with just 2 docs sharing "pdf" as
   // their only trigger, idf (and thus score) is naturally tiny.
-  const skills = routeHybrid(index, "pdf", { hybridThreshold: 0.01, suggest: "skill", k: 5 });
-  const tools = routeHybrid(index, "pdf", { hybridThreshold: 0.01, suggest: "tool", k: 5 });
+  const skills = await routeHybrid(index, "pdf", { hybridThreshold: 0.01, suggest: "skill", k: 5, denseEnabled: false });
+  const tools = await routeHybrid(index, "pdf", { hybridThreshold: 0.01, suggest: "tool", k: 5, denseEnabled: false });
   assert.ok(skills.every((result) => result.kind === "skill"));
   assert.ok(tools.every((result) => result.kind === "tool"));
   assert.equal(skills[0].id, "pdf-skill");
   assert.equal(tools[0].id, "pdf-tool");
 });
 
-test("hybrid: tool and skill lanes don't crowd each other out of a shared k", () => {
+test("hybrid: tool and skill lanes don't crowd each other out of a shared k", async () => {
   // Same fixture as the suggest-filter test above, but called the way real
   // callers actually do (push hook / MCP route tool / router-cli route all
   // default to suggest:"any", never "skill" or "tool" alone). A single
@@ -335,12 +343,12 @@ test("hybrid: tool and skill lanes don't crowd each other out of a shared k", ()
       },
     ],
   };
-  const result = routeHybrid(index, "pdf", { hybridThreshold: 0.01, k: 1 });
+  const result = await routeHybrid(index, "pdf", { hybridThreshold: 0.01, k: 1, denseEnabled: false });
   assert.ok(result.some((r) => r.id === "pdf-skill"), "skill lane must not be crowded out");
   assert.ok(result.some((r) => r.id === "pdf-tool"), "tool lane must not be crowded out");
 });
 
-test("hybrid: a lane where the top match barely beats the runner-up is silenced as diffuse noise", () => {
+test("hybrid: a lane where the top match barely beats the runner-up is silenced as diffuse noise", async () => {
   // Two docs sharing identical generic triggers score exactly tied (ratio
   // 1.0) — the same shape as the real remaining false positive (example-skill
   // vs skill-development both lit up by "router"/"skill"/"injecting").
@@ -362,11 +370,11 @@ test("hybrid: a lane where the top match barely beats the runner-up is silenced 
       },
     ],
   };
-  const result = routeHybrid(index, "architecture pattern", { hybridThreshold: 0.01, k: 5 });
+  const result = await routeHybrid(index, "architecture pattern", { hybridThreshold: 0.01, k: 5, denseEnabled: false });
   assert.equal(result.length, 0, "near-tied scores in a lane should be silenced, not guessed");
 });
 
-test("hybrid: a single dominant match in a lane still fires even with no competing runner-up", () => {
+test("hybrid: a single dominant match in a lane still fires even with no competing runner-up", async () => {
   const index = {
     entries: [
       {
@@ -378,11 +386,74 @@ test("hybrid: a single dominant match in a lane still fires even with no competi
       },
     ],
   };
-  const result = routeHybrid(index, "pdf", { hybridThreshold: 0.01, k: 5 });
+  const result = await routeHybrid(index, "pdf", { hybridThreshold: 0.01, k: 5, denseEnabled: false });
   assert.ok(result.some((r) => r.id === "pdf-skill"));
 });
 
-test("hybrid: capability docs enrich skills from SKILL metadata without bloating results", () => {
+// Fake extractor: keyed by exact input text so vectors (and thus cosine
+// similarity) are fully controlled, no real model/network involved. Query
+// and doc text share zero real vocabulary on purpose - the whole point is
+// proving dense rescues a case sparse structurally cannot reach at all
+// (sparse.length === 0), the same shape as the real e2e-testing miss
+// (docs/router-eval-set.jsonl) that motivated adding this channel.
+function fakeExtractor(vectors) {
+  return async (text) => ({ data: vectors[text] ?? [0, 0, 1] });
+}
+
+test("hybrid: dense channel rescues a paraphrase with zero shared vocabulary", async () => {
+  const index = {
+    entries: [
+      {
+        id: "wibble-skill",
+        type: "skill",
+        origin: "auto:skill",
+        path: "/skills/wibble-skill",
+        route: { triggers: ["wibble"], description: "wibble wobble gadzooks" },
+      },
+    ],
+  };
+  _setPipelineForTest(
+    fakeExtractor({
+      "xyzzy quux frobnicate": [1, 0, 0],
+      "wibble-skill wibble wibble wobble gadzooks": [0.99, 0.1411, 0],
+    }),
+  );
+  try {
+    const result = await routeHybrid(index, "xyzzy quux frobnicate", {
+      hybridThreshold: 350,
+      k: 5,
+      denseEnabled: true,
+      denseThreshold: 0.5,
+    });
+    assert.ok(result.some((r) => r.id === "wibble-skill"), "dense channel should surface a pure paraphrase miss");
+  } finally {
+    _forceUnavailableForTest();
+  }
+});
+
+test("hybrid: dense channel degrades to sparse-only behavior when the model is unavailable", async () => {
+  const index = {
+    entries: [
+      {
+        id: "wibble-skill",
+        type: "skill",
+        origin: "auto:skill",
+        path: "/skills/wibble-skill",
+        route: { triggers: ["wibble"], description: "wibble wobble gadzooks" },
+      },
+    ],
+  };
+  _forceUnavailableForTest();
+  const result = await routeHybrid(index, "xyzzy quux frobnicate", {
+    hybridThreshold: 350,
+    k: 5,
+    denseEnabled: true,
+    denseThreshold: 0.5,
+  });
+  assert.deepEqual(result, [], "no lexical match + unavailable dense = same silent abstain as sparse-only");
+});
+
+test("hybrid: capability docs enrich skills from SKILL metadata without bloating results", async () => {
   const index = {
     entries: [
       {
@@ -401,17 +472,18 @@ test("hybrid: capability docs enrich skills from SKILL metadata without bloating
   assert.match(docs[0].text, /mobile toolbar wrapping/);
   assert.match(docs[0].text, /responsive viewport failures/);
 
-  const result = routeHybrid(index, "mobile toolbar wrapping layout check", {
+  const result = await routeHybrid(index, "mobile toolbar wrapping layout check", {
     hybridThreshold: 2,
     suggest: "skill",
     k: 5,
+    denseEnabled: false,
   });
   assert.equal(result[0].id, "viewport-audit");
   assert.equal(result[0].how_to_use, "Viewport inspection");
   assert.ok(result[0].how_to_use.length < 300);
 });
 
-test("hybrid graph: expands only from seeded candidates", () => {
+test("hybrid graph: expands only from seeded candidates", async () => {
   const index = {
     entries: [
       {
@@ -436,11 +508,12 @@ test("hybrid graph: expands only from seeded candidates", () => {
       },
     ],
   };
-  const result = routeHybrid(index, "database migration rollout", {
+  const result = await routeHybrid(index, "database migration rollout", {
     graphPath: "core/fixtures/capability-graph.json",
     graphBoost: 0.5,
     hybridThreshold: 2,
     k: 5,
+    denseEnabled: false,
   });
   assert.equal(result[0].id, "database-migrations");
   assert.ok(result.some((r) => r.id === "postgres-patterns" && r.graphBoosted));
@@ -482,7 +555,7 @@ test("graph compiler: links related skills and tools from capability docs", () =
   );
 });
 
-test("hybrid graph: abstains when retrieval has no seed", () => {
+test("hybrid graph: abstains when retrieval has no seed", async () => {
   const index = {
     entries: [
       {
@@ -507,11 +580,12 @@ test("hybrid graph: abstains when retrieval has no seed", () => {
       },
     ],
   };
-  const result = routeHybrid(index, "write a poem", {
+  const result = await routeHybrid(index, "write a poem", {
     graphPath: "core/fixtures/capability-graph.json",
     graphBoost: 1,
     hybridThreshold: 2,
     k: 5,
+    denseEnabled: false,
   });
   assert.deepEqual(result, []);
 });

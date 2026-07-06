@@ -54,6 +54,36 @@ k: 5
 # the top hit yet still the wrong one) - that needs a semantic signal
 # (planned: PLAN.md Phase 4's local embedding model), not a sharper number.
 peakednessRatio: 1.05
+# Phase 4 semantic layer (PLAN.md): dense retrieval via BAAI/bge-m3
+# (core/dense-embedder.mjs) - a second, meaning-based channel additive to the
+# lexical one above, on by default so every user gets it with zero manual
+# setup (no install script, no model management - transformers.js downloads
+# and caches the model itself on first use, MIT-licensed, ~543MB quantized,
+# 100+ languages including Thai). Exists to close the one gap threshold/
+# margin tuning on lexical scores alone provably cannot: a genuine paraphrase
+# with little/no shared vocabulary (docs/router-eval-set.jsonl's e2e-testing
+# miss - "use Playwright to test login flow" vs the skill's own wording).
+# Fails soft to a no-op whenever the model isn't reachable, so this is safe
+# to leave on - every caller sees identical output to before whenever dense
+# doesn't contribute. denseThreshold is on cosine similarity's own 0..1
+# scale, never comparable to hybridThreshold's hundreds/thousands scale.
+# The push hook (adapters/hooks/universal-hook.mjs) explicitly disables this
+# per-call: it's a fresh subprocess per prompt, so it can't amortize a
+# 500MB+ model load the way the long-lived MCP server/CLI can.
+denseEnabled: true
+# 0.6, not the more intuitive-looking 0.55 - verified live against
+# docs/router-eval-set.jsonl with the real BGE-M3 model (not simulated): 0.55
+# let a genuinely irrelevant agent/skill pair through on "audit why route
+# suggestions are noisy and injected at the wrong time" (network-config-
+# reviewer/caveman-review, both boosted over the line by
+# actionAlignmentFactor's "review" match stacked on top of raw cosine
+# ~0.48-0.50 - BGE-M3's ambient similarity floor for unrelated short text,
+# not a genuine match). Swept 0.55/0.56/0.58/0.60 against the full eval set:
+# 0.55-0.56 fail, 0.58-0.60 both clean (falsePositiveCount 0, precisionAt1/
+# recallAt3 still 1, including the e2e-testing paraphrase this channel exists
+# to rescue) - a real plateau, not one lucky number. Picked 0.60 for extra
+# margin over the 0.58 edge.
+denseThreshold: 0.6
 # Phase 3 push-mode hook: hard char budget per injected suggestion block
 # (proxy for tokens — no tokenizer dependency for this). Lines are added
 # until the next one would exceed this, so it degrades to fewer/shorter

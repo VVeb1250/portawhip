@@ -58,13 +58,16 @@ async function main() {
       graphBoost: args.graphBoost ? Number(args.graphBoost) : config.graphBoost,
       suggest: args.suggest ?? "any",
       k: args.k ? Number(args.k) : config.k,
+      peakednessRatio: args.peakednessRatio ? Number(args.peakednessRatio) : config.peakednessRatio,
+      denseEnabled: args["no-dense"] ? false : config.denseEnabled,
+      denseThreshold: args.denseThreshold ? Number(args.denseThreshold) : config.denseThreshold,
       factors: combineFactors(
         computeFactors(dirname(resolve(primaryRecipe))),
         stackFactors(index, process.cwd()),
       ),
     };
     const engine = args.engine ?? config.engine;
-    const result = runRoute(index, args.prompt, { ...opts, engine });
+    const result = await runRoute(index, args.prompt, { ...opts, engine });
     console.log(JSON.stringify(result));
     return;
   }
@@ -81,10 +84,13 @@ async function main() {
       graphBoost: args.graphBoost ? Number(args.graphBoost) : config.graphBoost,
       suggest: args.suggest ?? "any",
       k: args.k ? Number(args.k) : config.k,
+      peakednessRatio: args.peakednessRatio ? Number(args.peakednessRatio) : config.peakednessRatio,
+      denseEnabled: args["no-dense"] ? false : config.denseEnabled,
+      denseThreshold: args.denseThreshold ? Number(args.denseThreshold) : config.denseThreshold,
     };
     console.log(
       JSON.stringify(
-        runRouterEval(index, opts, {
+        await runRouterEval(index, opts, {
           evalPath: args.evalPath ?? "docs/router-eval-set.jsonl",
           engine: args.engine ?? "hybrid",
           suggest: args.suggest ?? "any",
@@ -100,7 +106,7 @@ async function main() {
     const config = loadConfig(args.config ?? "router.config.yaml");
     console.log(
       JSON.stringify(
-        runRouterEvalComparison(index, config, {
+        await runRouterEvalComparison(index, config, {
           evalPath: args.evalPath ?? "docs/router-eval-set.jsonl",
           suggest: args.suggest ?? "any",
         }),
