@@ -67,6 +67,15 @@ const BROAD_TERMS = new Set([
   "capability",
 ]);
 
+// Infinity means "sole lane survivor, nothing to be tied with" - the same
+// no-penalty case gateLane already treats as automatically dominant.
+function laneMarginRatio(laneCandidates) {
+  if (laneCandidates.length < 2) return Infinity;
+  const sorted = [...laneCandidates].sort((a, b) => b.score - a.score);
+  const [top, runnerUp] = sorted;
+  return runnerUp.score <= 0 ? Infinity : top.score / runnerUp.score;
+}
+
 // A lane where the top match barely beats the runner-up is diffuse-vocabulary
 // noise, not a genuine pick — verified against docs/router-eval-set.jsonl's
 // one remaining false positive: "what context signals should a router
@@ -75,12 +84,42 @@ const BROAD_TERMS = new Set([
 // generic "router"/"skill"/"injecting" words), while every real match in the
 // set has a clear top pick with no close runner-up. A lane with only one
 // surviving candidate is never penalized (nothing to be tied with).
-function dropIfDiffuse(laneCandidates, ratio) {
-  if (laneCandidates.length < 2) return laneCandidates;
-  const sorted = [...laneCandidates].sort((a, b) => b.score - a.score);
-  const [top, runnerUp] = sorted;
-  if (runnerUp.score <= 0 || top.score / runnerUp.score >= ratio) return laneCandidates;
-  return [];
+//
+// Survivors are tagged with the same marginRatio used for the gate decision,
+// not just recomputed silently - Stage 3 calibration (classifyCandidate)
+// reads it to keep confidence honest for a candidate that barely cleared the
+// gate, not just ones that got silenced entirely. See marginConfidenceFactor.
+function gateLane(laneCandidates, ratio) {
+  const marginRatio = laneMarginRatio(laneCandidates);
+  if (laneCandidates.length >= 2 && marginRatio < ratio) return [];
+  return laneCandidates.map((candidate) => ({ ...candidate, marginRatio }));
+}
+
+// Ramps confidence down for a candidate that only barely cleared the
+// peakedness gate (docs/intent-gate-bakeoff.md's calibration ask - Codex
+// point 3: "broad-term/dense-only/no-margin candidates must not read
+// confidence 1"). marginRatio===Infinity (sole lane survivor - nothing was
+// close) is full confidence; right at the gate ratio is the floor; by 0.45
+// above the gate ("clearly dominant" - empirically chosen headroom, not
+// tuned to a specific eval case) it's back to full.
+function marginConfidenceFactor(marginRatio, gateRatio) {
+  if (!Number.isFinite(marginRatio)) return 1.0;
+  const CONFIDENT = gateRatio + 0.45;
+  if (marginRatio <= gateRatio) return 0.5;
+  if (marginRatio >= CONFIDENT) return 1.0;
+  return 0.5 + ((marginRatio - gateRatio) / (CONFIDENT - gateRatio)) * 0.5;
+}
+
+// Curated (recipe.yaml) entries are trusted outright - deliberately
+// authored, same rationale as the recipe/auto threshold split. A candidate
+// with no direct lexical evidence at all (terms.length===0 - always true for
+// a dense-only or graph-only hit, since neither carries real matched terms)
+// is a similarity/adjacency GUESS, not an exact match, and must not read as
+// confidently as one. A sparse hit that survived the tier filter above
+// always has at least one specific (non-broad) term by construction.
+function specificityConfidenceFactor(item) {
+  if (item.doc?.origin === "recipe") return 1.0;
+  return (item.terms ?? []).length === 0 ? 0.6 : 1.0;
 }
 
 function compactReason(item) {
@@ -94,16 +133,29 @@ function compactReason(item) {
   return "matched capability text";
 }
 
-function classifyCandidate(item, bar) {
+function classifyCandidate(item, bar, peakednessRatio = 1.05) {
   const score = item.score ?? item.rrfScore ?? 0;
-  const confidence = bar > 0 ? Math.min(1, score / bar) : 1;
+  const baseConfidence = bar > 0 ? Math.min(1, score / bar) : 1;
   const terms = item.terms ?? [];
   const specificTerms = terms.filter((term) => !BROAD_TERMS.has(term));
   const weakKeywordOnly = terms.length > 0 && specificTerms.length === 0 && item.doc?.origin !== "recipe";
+  // Composite, not a single score/threshold ratio (docs/intent-gate-bakeoff.md
+  // / Codex point 3): a candidate that barely cleared the peakedness gate, or
+  // has no direct lexical evidence (dense/graph-only), must not read as
+  // confidently as one that's both dominant in its lane AND directly matched.
+  const confidence = Math.max(
+    0,
+    Math.min(
+      1,
+      baseConfidence *
+        specificityConfidenceFactor(item) *
+        marginConfidenceFactor(item.marginRatio ?? Infinity, peakednessRatio),
+    ),
+  );
 
   if (score >= bar && !weakKeywordOnly) {
     return {
-      tier: confidence >= 1 && item.doc?.origin === "recipe" ? "required" : "recommended",
+      tier: confidence >= 0.9 && item.doc?.origin === "recipe" ? "required" : "recommended",
       confidence,
       action: item.doc?.action ?? (item.doc?.type === "skill" ? "read_skill" : "use_capability"),
     };
@@ -116,9 +168,9 @@ function classifyCandidate(item, bar) {
   };
 }
 
-function formatResult(item, bar) {
+function formatResult(item, bar, peakednessRatio) {
   const doc = item.doc;
-  const classification = classifyCandidate(item, bar);
+  const classification = classifyCandidate(item, bar, peakednessRatio);
   return {
     id: doc.id,
     type: doc.type,
@@ -250,7 +302,7 @@ export async function routeHybrid(
   const candidatesForLanes = [...filtered, ...denseOnly];
   if (candidatesForLanes.length === 0) {
     if (!includeWeak) return [];
-    return candidates.slice(0, k).map((candidate) => formatResult(candidate, candidate.bar));
+    return candidates.slice(0, k).map((candidate) => formatResult(candidate, candidate.bar, peakednessRatio));
   }
 
   // Tools and skills get their own reserved k slots, not one shared slice.
@@ -267,18 +319,18 @@ export async function routeHybrid(
     lanes.get(kind).push(candidate);
   }
   const laneWinners = [...lanes.values()].flatMap((laneCandidates) =>
-    reciprocalRankFusion([dropIfDiffuse(laneCandidates, peakednessRatio)]).slice(0, k),
+    reciprocalRankFusion([gateLane(laneCandidates, peakednessRatio)]).slice(0, k),
   );
   const fused = laneWinners.sort(
     (a, b) => (b.score ?? 0) - (a.score ?? 0) || a.doc.id.localeCompare(b.doc.id),
   );
-  const routed = fused.map((item) => formatResult(item, item.bar));
+  const routed = fused.map((item) => formatResult(item, item.bar, peakednessRatio));
   if (!includeWeak || routed.length >= k) return routed;
 
   const routedIds = new Set(routed.map((item) => item.id));
   const weak = candidates
     .filter((candidate) => !routedIds.has(candidate.doc.id))
     .slice(0, k - routed.length)
-    .map((candidate) => formatResult(candidate, candidate.bar));
+    .map((candidate) => formatResult(candidate, candidate.bar, peakednessRatio));
   return [...routed, ...weak];
 }
