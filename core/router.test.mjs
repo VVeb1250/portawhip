@@ -70,6 +70,13 @@ test("explainRoute: returns actionable results plus structured route metadata", 
   assert.equal(result.results[0].tier, "required");
   assert.equal(result.negative_evidence, null);
   assert.ok(Number.isInteger(result.latency_ms));
+  // Stage 4: decision/near_misses/reason are additive aliases of
+  // status/suppressed/negative_evidence.reason, in the literal vocabulary
+  // ("route"/"abstain") the decision-layer redesign asked for - never a
+  // breaking rename of the original fields (this server is published).
+  assert.equal(result.decision, "route");
+  assert.deepEqual(result.near_misses, result.suppressed);
+  assert.equal(result.reason, null);
 });
 
 test("explainRoute: empty result includes negative evidence", async () => {
@@ -79,6 +86,9 @@ test("explainRoute: empty result includes negative evidence", async () => {
   assert.deepEqual(result.results, []);
   assert.equal(result.negative_evidence.result, "empty");
   assert.match(result.negative_evidence.reason, /threshold|weak|keyword/i);
+  assert.equal(result.decision, "abstain");
+  assert.deepEqual(result.near_misses, result.suppressed);
+  assert.equal(result.reason, result.negative_evidence.reason);
 });
 
 test("curated aliases: harness audit routes to workspace surface audit", async () => {
