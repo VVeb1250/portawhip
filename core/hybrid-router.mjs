@@ -52,6 +52,19 @@ const BROAD_TERMS = new Set([
   "add",
   "remove",
   "delete",
+  // The capability system's own vocabulary. "tool"/"skill"/"agent"/"hook"/
+  // "router" are already above; "mcp"/"cli"/"capability" complete the set.
+  // A prompt that overlaps a capability ONLY through these words is talking
+  // ABOUT the tool/skill/MCP machinery, not requesting a task - it's the
+  // intent-gate case (docs/router-live.test.mjs): "research MCP availability
+  // ... dynamic tools and skills ..." matched build-mcp-server purely on
+  // {mcp, tool, skill}, all meta-vocabulary, and cleared the bar because
+  // "mcp" alone wasn't yet classed as generic. Same weakKeywordOnly
+  // mechanism - a prompt that ALSO shares a task-specific word (e.g. "wrap
+  // this REST API as an MCP server") still passes untouched.
+  "mcp",
+  "cli",
+  "capability",
 ]);
 
 // A lane where the top match barely beats the runner-up is diffuse-vocabulary

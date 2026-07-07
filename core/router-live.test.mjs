@@ -69,23 +69,23 @@ test("live: a design-discussion prompt about routing internals abstains", async 
   assert.deepEqual(result, [], `expected abstain on design discussion, got ${result.map((r) => r.id).join(",")}`);
 });
 
-// --- Known live failure (todo) — the spec for the stage-1 intent gate. ------
-// The ONE meta prompt that still false-positives deterministically (probed
-// 2026-07-07 across the real index): it is saturated with capability-name
-// vocab ("MCP", "tools", "skills"), so build-mcp-server/build-mcp-app clear
-// the bar even though the user is researching the domain, not asking to build
-// a server. This is the narrow, real remaining job of the intent gate. Marked
-// todo, not skipped: node runs it, reports expected-failing, keeps the suite
-// green, and flags it the day it starts passing so it gets promoted to a hard
-// assertion. Do NOT "fix" it by loosening the assertion - fix it by building
-// the gate.
+// Stage-1 intent gate (fixed 2026-07-07). This prompt used to be the one
+// deterministic false positive: saturated with capability-name vocab ("MCP",
+// "tools", "skills"), it matched build-mcp-server/build-mcp-app purely on
+// {mcp, tool, skill} and cleared the bar, because "mcp" wasn't yet classed as
+// generic. Diagnosing the actual matched terms (not guessing) showed this
+// needed no heavy semantic classifier - the overlap was entirely the
+// capability system's OWN vocabulary. Adding mcp/cli/capability to
+// hybrid-router.mjs's BROAD_TERMS makes weakKeywordOnly suppress it on the
+// sparse channel; the dense channel abstains on its own (abstract-research
+// cosine stays under denseThreshold). Verified clean on BOTH channels.
 //
 // (A second, separate FP axis exists but is deliberately NOT tested here
 // because it is non-deterministic: a capability that has been used before can
 // get boosted by computeFactors' feedback signal onto a tangential prompt -
 // found live, but it depends on feedback-log state, so it can't be a stable
 // committed assertion.)
-test("live [intent-gate TODO]: a capability-vocab-saturated research prompt must abstain", { todo: true }, async () => {
+test("live: a capability-vocab-saturated research prompt abstains (intent gate)", async () => {
   const result = await route("research MCP availability and live precision for dynamic tools and skills and future agents");
-  assert.deepEqual(result, [], `expected abstain, got ${result.map((r) => r.id).join(",")}`);
+  assert.deepEqual(result, [], `expected abstain on capability-domain research, got ${result.map((r) => r.id).join(",")}`);
 });
