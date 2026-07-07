@@ -15,6 +15,7 @@ import { loadConfig } from "../core/config.mjs";
 import { computeFactors, logEvent } from "../core/feedback.mjs";
 import { stackFactors, combineFactors } from "../core/stack-detect.mjs";
 import { readActiveSelection, resolveRecipePaths } from "../core/bundle-state.mjs";
+import { warmDense } from "../core/dense-embedder.mjs";
 
 // This server is registered globally (add-mcp may promote project scope to
 // global depending on the host), so a caller can invoke it from ANY cwd —
@@ -46,7 +47,17 @@ server.tool(
     const graphPath =
       config.graphPath && !isAbsolute(config.graphPath) ? join(ROOT, config.graphPath) : config.graphPath;
     const factors = combineFactors(computeFactors(ROOT), stackFactors(index, process.cwd()));
-    const result = await explainRoute(index, query, { ...config, graphPath, k: k ?? config.k, factors });
+    // denseBlock:false - this is the interactive tier. A cold dense-model load
+    // must never block a route() call (it would time the MCP client out; see
+    // core/dense-embedder.mjs). Early calls are sparse-only and dense joins in
+    // once the background warm (started at server boot below) finishes.
+    const result = await explainRoute(index, query, {
+      ...config,
+      graphPath,
+      k: k ?? config.k,
+      factors,
+      denseBlock: false,
+    });
     logEvent(ROOT, {
       type: "route",
       engine: config.engine,
@@ -72,6 +83,13 @@ server.tool(
     return { content: [{ type: "text", text: JSON.stringify(result) }] };
   },
 );
+
+// Start the (slow) dense model load in the background at boot, so it overlaps
+// the idle time before the first route() call rather than blocking it. Safe
+// to call unconditionally: it's fire-and-forget and a no-op when the model
+// can't be loaded (dense degrades to sparse-only). If dense is disabled in
+// config, the warm still completes harmlessly and simply never gets used.
+warmDense();
 
 const transport = new StdioServerTransport();
 await server.connect(transport);

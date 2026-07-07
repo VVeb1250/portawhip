@@ -144,6 +144,11 @@ export async function routeHybrid(
     peakednessRatio = 1.05,
     denseEnabled = true,
     denseThreshold = 0.6,
+    // Default true = wait for the dense model (deterministic - what CLI and
+    // eval want). The MCP server passes false so a cold model load never
+    // blocks an interactive route() call into a client timeout; see
+    // core/dense-embedder.mjs's warmDense/denseRetrieve.
+    denseBlock = true,
   } = {},
 ) {
   const docs = buildCapabilityDocs(index);
@@ -213,7 +218,11 @@ export async function routeHybrid(
   const filteredIds = new Set(filtered.map((candidate) => candidate.doc.id));
   let denseOnly = [];
   if (denseEnabled) {
-    const denseHits = await denseRetrieve(docs, prompt, { k: Math.max(k * 4, 20), minScore: 0 });
+    const denseHits = await denseRetrieve(docs, prompt, {
+      k: Math.max(k * 4, 20),
+      minScore: 0,
+      block: denseBlock,
+    });
     denseOnly = denseHits
       .filter((hit) => matchesSuggestKind(hit.doc.type, suggest) && !filteredIds.has(hit.id))
       .map((hit) => ({

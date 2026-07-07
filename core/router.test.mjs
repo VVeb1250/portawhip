@@ -5,7 +5,11 @@ import { compileCapabilityGraph } from "./capability-graph-compiler.mjs";
 import { route, listAll, scoreEntry } from "./scorer.mjs";
 import { buildCapabilityDocs } from "./capability-docs.mjs";
 import { routeHybrid } from "./hybrid-router.mjs";
-import { _setPipelineForTest, _forceUnavailableForTest } from "./dense-embedder.mjs";
+import {
+  _setPipelineForTest,
+  _forceUnavailableForTest,
+  _setPipelinePendingForTest,
+} from "./dense-embedder.mjs";
 import { explainRoute } from "./route-entry.mjs";
 import { loadConfig } from "./config.mjs";
 import { CONNECTOR_TARGETS, targetsForHost } from "./connector-targets.mjs";
@@ -451,6 +455,42 @@ test("hybrid: dense channel degrades to sparse-only behavior when the model is u
     denseThreshold: 0.5,
   });
   assert.deepEqual(result, [], "no lexical match + unavailable dense = same silent abstain as sparse-only");
+});
+
+test("hybrid: denseBlock:false returns sparse-only while the model is still warming, then dense once ready", async () => {
+  const index = {
+    entries: [
+      {
+        id: "wibble-skill",
+        type: "skill",
+        origin: "auto:skill",
+        path: "/skills/wibble-skill",
+        route: { triggers: ["wibble"], description: "wibble wobble gadzooks" },
+      },
+    ],
+  };
+  const opts = { hybridThreshold: 350, k: 5, denseEnabled: true, denseThreshold: 0.5, denseBlock: false };
+
+  // Model still loading in the background: a non-blocking caller (the MCP
+  // server's tier) must NOT await it - it gets sparse-only this call. With no
+  // lexical match either, that means a silent abstain, never a 73s hang.
+  _setPipelinePendingForTest();
+  const whileWarming = await routeHybrid(index, "xyzzy quux frobnicate", opts);
+  assert.deepEqual(whileWarming, [], "non-blocking call must not wait on a cold model load");
+
+  // Once warm, the same non-blocking call picks dense up with no code change.
+  _setPipelineForTest(
+    fakeExtractor({
+      "xyzzy quux frobnicate": [1, 0, 0],
+      "wibble-skill wibble wibble wobble gadzooks": [0.99, 0.1411, 0],
+    }),
+  );
+  try {
+    const warmed = await routeHybrid(index, "xyzzy quux frobnicate", opts);
+    assert.ok(warmed.some((r) => r.id === "wibble-skill"), "dense joins in once the model is ready");
+  } finally {
+    _forceUnavailableForTest();
+  }
 });
 
 test("hybrid: capability docs enrich skills from SKILL metadata without bloating results", async () => {

@@ -16,20 +16,44 @@
 
 const MODEL_ID = "Xenova/bge-m3";
 
-let pipelinePromise = null;
+// The resolved pipeline, or null until the (slow) first load finishes. Kept
+// separate from the load promise so callers can synchronously ask "is it
+// ready RIGHT NOW?" without awaiting - the whole point of the non-blocking
+// path below.
+let extractor = null;
+let loadStarted = false;
 let unavailable = false;
+let loadPromise = null;
 
-async function getPipeline() {
-  if (unavailable) return null;
-  if (!pipelinePromise) {
-    pipelinePromise = import("@huggingface/transformers")
-      .then(({ pipeline }) => pipeline("feature-extraction", MODEL_ID))
-      .catch((err) => {
-        unavailable = true;
-        return null;
-      });
-  }
-  return pipelinePromise;
+// Kicks off the model load in the background (idempotent). The first load is
+// slow - measured ~73s cold in the live MCP server (download + ONNX init) -
+// so a caller must NEVER sit inside an await on this while serving an
+// interactive request: an MCP client times out (~30-60s) long before it
+// finishes, drops the connection, and route() becomes uncallable for the
+// whole session (found live 2026-07-07: dense-on-by-default silently broke
+// the MCP server this way). This returns immediately; the load resolves
+// `extractor` whenever it's done.
+function startWarm() {
+  if (extractor || unavailable || loadStarted) return loadPromise;
+  loadStarted = true;
+  loadPromise = import("@huggingface/transformers")
+    .then(({ pipeline }) => pipeline("feature-extraction", MODEL_ID))
+    .then((ex) => {
+      extractor = ex;
+      return ex;
+    })
+    .catch(() => {
+      unavailable = true;
+      return null;
+    });
+  return loadPromise;
+}
+
+// Let a long-lived caller (the MCP server) start the load at startup so the
+// ~73s cold load overlaps idle time before the first route() call, instead
+// of landing on top of it. Fire-and-forget: returns nothing, never throws.
+export function warmDense() {
+  startWarm();
 }
 
 // Docs are rebuilt fresh per call (core/hybrid-router.mjs's own comment on
@@ -71,16 +95,27 @@ async function embedDoc(extractor, doc) {
 // Score is raw cosine similarity (0..1), never comparable to sparse's
 // hundreds/thousands-scale BM25-ish numbers - callers must not mix the two
 // on one bar (see hybrid-router.mjs's own dense-specific threshold).
-export async function denseRetrieve(docs, query, { k = 20, minScore = 0.6 } = {}) {
+// block=false (the MCP server's tier): if the model isn't warm yet, start the
+// background load and return [] immediately - this call is sparse-only, and
+// dense silently joins in on a later call once warm. block=true (CLI/eval):
+// wait for the load, because those paths want full, deterministic results and
+// there's no interactive client to time out.
+export async function denseRetrieve(docs, query, { k = 20, minScore = 0.6, block = true } = {}) {
   if (docs.length === 0) return [];
-  const extractor = await getPipeline();
-  if (!extractor) return [];
+  if (unavailable) return [];
+  if (!extractor) {
+    const pending = startWarm();
+    if (!block) return [];
+    await pending;
+    if (!extractor) return [];
+  }
+  const ready = extractor;
 
   try {
-    const queryVector = await embed(extractor, query);
+    const queryVector = await embed(ready, query);
     const scored = [];
     for (const doc of docs) {
-      const docVector = await embedDoc(extractor, doc);
+      const docVector = await embedDoc(ready, doc);
       const score = cosineSim(queryVector, docVector);
       if (score >= minScore) scored.push({ id: doc.id, doc, score });
     }
@@ -93,16 +128,32 @@ export async function denseRetrieve(docs, query, { k = 20, minScore = 0.6 } = {}
 
 // Test-only seams: real model load takes seconds and needs network/disk, so
 // unit tests for hybrid-router's fusion logic inject a fake extractor (or
-// force the "unavailable" degrade-path) instead of paying that cost on every
-// run. Never called from production code paths.
+// force the "unavailable"/"still loading" states) instead of paying that cost
+// on every run. Never called from production code paths.
 export function _setPipelineForTest(fakeExtractor) {
-  pipelinePromise = Promise.resolve(fakeExtractor);
+  extractor = fakeExtractor;
   unavailable = false;
+  loadStarted = true;
+  loadPromise = Promise.resolve(fakeExtractor);
   embeddingCache.clear();
 }
 
 export function _forceUnavailableForTest() {
-  pipelinePromise = Promise.resolve(null);
+  extractor = null;
   unavailable = true;
+  loadStarted = true;
+  loadPromise = Promise.resolve(null);
+  embeddingCache.clear();
+}
+
+// Simulates "load kicked off but not resolved yet" - lets a test exercise the
+// non-blocking (block:false) sparse-only path without triggering a real model
+// download. loadStarted is pre-set so denseRetrieve won't start a real import;
+// the promise deliberately never resolves, so only block:false is safe here.
+export function _setPipelinePendingForTest() {
+  extractor = null;
+  unavailable = false;
+  loadStarted = true;
+  loadPromise = new Promise(() => {});
   embeddingCache.clear();
 }
