@@ -9,7 +9,7 @@
 //   post_tool   -> mark suggested capabilities as used
 
 import { existsSync } from "node:fs";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { dirname, join, isAbsolute } from "node:path";
 import { loadIndex, readCachedIndex } from "../../core/registry.mjs";
 import { runRoute } from "../../core/route-entry.mjs";
@@ -250,6 +250,8 @@ async function main() {
   if (args.event === "post_tool") await postTool(payload, args);
 }
 
-main().catch(() => {
-  // Hooks must fail open; a sync-layer bug should never block the user.
-});
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main().catch(() => {
+    // Hooks must fail open; a sync-layer bug should never block the user.
+  });
+}
