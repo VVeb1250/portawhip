@@ -29,9 +29,28 @@ function parseArgs(argv) {
   return args;
 }
 
+function printUsage() {
+  console.log(`usage:
+  node core/router-cli.mjs route --prompt "..." [--engine hybrid|keyword] [--no-dense|--dense-block]
+  node core/router-cli.mjs eval [--engine hybrid|keyword]
+  node core/router-cli.mjs compare
+  node core/router-cli.mjs enrich
+  node core/router-cli.mjs harvest-negatives
+  node core/router-cli.mjs graph-compile [--out path]
+  node core/router-cli.mjs list [--type mcp|cli|skill]
+
+Notes:
+  route is interactive-fast by default: dense retrieval joins only if already warm.
+  use --dense-block when you explicitly want route to wait for dense retrieval.`);
+}
+
 async function main() {
   const [, , command, ...rest] = process.argv;
   const args = parseArgs(rest);
+  if (!command || command === "--help" || command === "-h" || args.help || args.h) {
+    printUsage();
+    return;
+  }
   // --recipe is an explicit override (bypasses the opt-in bundle layer
   // entirely) so existing single-recipe usage and tests are unaffected.
   // Otherwise resolve whatever bundles the user has opted into via
@@ -61,6 +80,7 @@ async function main() {
       peakednessRatio: args.peakednessRatio ? Number(args.peakednessRatio) : config.peakednessRatio,
       denseEnabled: args["no-dense"] ? false : config.denseEnabled,
       denseThreshold: args.denseThreshold ? Number(args.denseThreshold) : config.denseThreshold,
+      denseBlock: args["dense-block"] ? true : false,
       factors: combineFactors(
         computeFactors(dirname(resolve(primaryRecipe))),
         stackFactors(index, process.cwd()),

@@ -100,6 +100,64 @@
     inject: hint
     action: read_skill
 
+- id: ai-config-sync-manager
+  type: config-sync
+  source: ai-config-sync
+  install: false
+  route:
+    triggers:
+      [
+        "sync claude codex config",
+        "sync config",
+        "config drift",
+        "copy skills to codex",
+        "copy skills to claude",
+        "sync mcp config",
+        "sync hooks permissions",
+        "claude codex drift",
+      ]
+    description: "Bidirectional Claude Code/Codex config sync via ai-config-sync-manager"
+    when: [user_prompt]
+    inject: hint
+    action: run_sync_config
+
+- id: agent-skill-manager-sync-probe
+  type: config-sync
+  source: agent-skill-manager
+  install: false
+  route:
+    triggers:
+      [
+        "agent-skill-manager",
+        "asm providers",
+        "skill providers",
+        "skills installed across hosts",
+        "sync skills",
+      ]
+    description: "Probe agent-skill-manager provider state used by the skill install backend"
+    when: [user_prompt]
+    inject: hint
+    action: run_sync_config_status
+
+- id: agents-dotdir-sync
+  type: config-sync
+  source: agents
+  install: false
+  route:
+    triggers:
+      [
+        ".agents",
+        "agents sync",
+        "agents status",
+        "single source of truth",
+        "sync all hosts",
+        "sync codex claude gemini cursor",
+      ]
+    description: "Probe or run @agents-dev/cli .agents source-of-truth sync across many hosts"
+    when: [user_prompt]
+    inject: hint
+    action: run_sync_config
+
 - id: configure-ecc
   type: skill
   source: configure-ecc

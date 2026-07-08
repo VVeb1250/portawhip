@@ -78,6 +78,23 @@ Default commands are read-only or dry-run. Writes require
 `node scripts/sync-config.mjs apply --apply` plus a narrow `--include` or
 `--profile`; broad all-area apply and all-skills apply are blocked.
 
+Runtime package execution is pinned by default. `ai-config-sync-manager` is
+installed as an exact dev dependency, so `npm run sync-config` uses
+`node_modules/.bin/ai-config-sync` instead of downloading a package at command
+time. The fallback to `npx --yes` is disabled unless the caller explicitly
+passes `--allow-npx` or sets `PORTAWHIP_ALLOW_NPX=1`.
+
+The TUI is available with:
+
+```bash
+npm run tui
+node scripts/tui.mjs --summary
+node scripts/tui.mjs --help
+```
+
+`router-cli route` is interactive-fast by default: dense retrieval joins only
+when already warm. Use `--dense-block` for explicit offline/eval-style waits.
+
 Built-in profiles:
 
 - `ai-project-instructions` — project-scope Claude/Codex instructions only.
