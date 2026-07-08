@@ -69,6 +69,15 @@ server.tool(
       latencyMs: result.latency_ms,
       emptyReason: result.negative_evidence?.reason ?? null,
     });
+    // Pull results join the trust loop as boost-only signal (2026-07-09):
+    // source:"pull" marks these so computeFactors credits a follow-up "used"
+    // (Claude asked, got an answer, acted on it - the strongest possible
+    // relevance signal) but never counts an unused pull result as an
+    // "ignored" outcome. Pull is recall-generous by design; punishing
+    // unclicked results would recreate the noise-decay bug at this layer.
+    for (const hit of result.results) {
+      logEvent(ROOT, { type: "suggested", id: hit.id, source: "pull", query });
+    }
     return { content: [{ type: "text", text: JSON.stringify(result) }] };
   },
 );

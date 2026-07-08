@@ -87,18 +87,30 @@ export function computeFactors(root) {
   for (const [id, idEvents] of byId) {
     // Resolve each "suggested" against the next "used" that follows it in
     // time for the same id -> a bounded sequence of hit/miss outcomes.
+    //
+    // Asymmetric credit (2026-07-09): suggestions with source:"pull" (MCP
+    // route() results - Claude asked) count toward boost when followed by a
+    // "used", but an unused pull suggestion resolves to NO outcome, not an
+    // ignored one. Pull is recall-generous by design - most returned
+    // candidates going unused is normal operation, not negative signal.
+    // Only push suggestions (unsolicited injections the model definitely
+    // saw) earn decay when ignored.
     const outcomes = [];
-    let pendingSuggestion = false;
+    let pending = null; // null | "push" | "pull"
+    const resolveIgnored = () => {
+      if (pending === "push") outcomes.push(false);
+      pending = null;
+    };
     for (const e of idEvents) {
       if (e.type === "suggested") {
-        if (pendingSuggestion) outcomes.push(false); // prior suggestion never used
-        pendingSuggestion = true;
-      } else if (e.type === "used" && pendingSuggestion) {
+        resolveIgnored();
+        pending = e.source === "pull" ? "pull" : "push";
+      } else if (e.type === "used" && pending) {
         outcomes.push(true);
-        pendingSuggestion = false;
+        pending = null;
       }
     }
-    if (pendingSuggestion) outcomes.push(false);
+    resolveIgnored();
 
     if (outcomes.length === 0) {
       factors.set(id, 1.0);

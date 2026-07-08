@@ -127,3 +127,55 @@ test("feedback: suggestions fired on synthetic prompts are ignored, not counted 
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+test("feedback: pull-suggested then used earns boost (asymmetric credit, hit side)", () => {
+  const root = tempRoot();
+  try {
+    logEvent(root, { type: "suggested", id: "exa", source: "pull", query: "web search" });
+    logEvent(root, { type: "used", id: "exa", tool: "mcp__exa__web_search_exa" });
+    const factors = computeFactors(root);
+    assert.equal(factors.get("exa"), 1.2);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("feedback: pull-suggested but never used stays neutral, no decay", () => {
+  const root = tempRoot();
+  try {
+    // Pull is recall-generous: unused pull results are normal operation.
+    for (let i = 0; i < 10; i += 1) {
+      logEvent(root, { type: "suggested", id: "exa", source: "pull", query: "web search" });
+    }
+    const factors = computeFactors(root);
+    assert.equal(factors.get("exa"), 1.0);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("feedback: push-suggested and ignored still decays (existing behavior preserved)", () => {
+  const root = tempRoot();
+  try {
+    logEvent(root, { type: "suggested", id: "ripgrep", prompt: "search codebase for foo" });
+    logEvent(root, { type: "suggested", id: "ripgrep", prompt: "search codebase again" });
+    const factors = computeFactors(root);
+    assert.ok(factors.get("ripgrep") < 1.0);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("feedback: mixed pull-ignored between push events doesn't break push decay", () => {
+  const root = tempRoot();
+  try {
+    // push ignored -> pull ignored (no outcome) -> push ignored: streak of 2 ignores.
+    logEvent(root, { type: "suggested", id: "x", prompt: "real prompt one here" });
+    logEvent(root, { type: "suggested", id: "x", source: "pull", query: "lookup" });
+    logEvent(root, { type: "suggested", id: "x", prompt: "real prompt two here" });
+    const factors = computeFactors(root);
+    assert.equal(factors.get("x"), Math.max(0.5, 1 - 0.15 * 2));
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
