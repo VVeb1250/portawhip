@@ -104,29 +104,41 @@ export function actionDirective(hit, host) {
 // full lines repeat every single turn a capability keeps matching, even
 // within the same session where the agent was already told this once.
 // Reusing that existing log to render tersely on repeat costs nothing new
-// (no state to add) and only pays the full, detailed line once per id per
-// session - generic over id/host, no capability-specific logic.
-function sessionSuggestedIds(root, sessionId) {
-  if (!sessionId) return new Set();
-  return new Set(
-    readEvents(root)
-      .filter((e) => e.type === "suggested" && e.sessionId === sessionId)
-      .map((e) => e.id),
-  );
+// (no state to add). Extended 2026-07-09 from a Set to per-id counts:
+// mention 1 renders full, mention 2 renders terse, then the id goes SILENT
+// for the session (interrupt budget - an assistant that reminds twice and
+// then shuts up, instead of nagging every turn a capability keeps matching).
+function sessionSuggestedCounts(root, sessionId) {
+  const counts = new Map();
+  if (!sessionId) return counts;
+  for (const e of readEvents(root)) {
+    if (e.type !== "suggested" || e.sessionId !== sessionId) continue;
+    counts.set(e.id, (counts.get(e.id) ?? 0) + 1);
+  }
+  return counts;
 }
 
-function formatBlock(result, budgetChars, cwd, host, alreadySuggestedIds) {
+// Returns {block, renderedIds}: only ids actually shown to the model get
+// logged as "suggested" (previously every routed hit was logged even when
+// the char budget dropped its line - phantom suggestions the model never
+// saw, each counting as an "ignored" outcome in computeFactors).
+function formatBlock(result, budgetChars, cwd, host, mentionCounts, maxMentions) {
   const lines = [];
+  const renderedIds = [];
   let used = 0;
   for (const hit of result) {
-    const line = alreadySuggestedIds.has(hit.id)
-      ? `- ${hit.id} - still relevant, use it again if applicable`
-      : `- ${hit.id} - ${hit.how_to_use}${readinessNote(hit, cwd)} - ${actionDirective(hit, host)}`;
+    const mentions = mentionCounts.get(hit.id) ?? 0;
+    if (mentions >= maxMentions) continue; // interrupt budget spent for this session
+    const line =
+      mentions > 0
+        ? `- ${hit.id} - still relevant, use it again if applicable`
+        : `- ${hit.id} - ${hit.how_to_use}${readinessNote(hit, cwd)} - ${actionDirective(hit, host)}`;
     if (used + line.length > budgetChars && lines.length > 0) break;
     lines.push(line);
+    renderedIds.push(hit.id);
     used += line.length;
   }
-  return lines.join("\n");
+  return { block: lines.join("\n"), renderedIds };
 }
 
 function outputAdditionalContext(host, nativeEvent, additionalContext) {
@@ -222,15 +234,31 @@ async function userPrompt(payload, args) {
   // subprocess per prompt (see hook-stub.mjs), so it would pay that cold
   // load on every keystroke. Push mode stays sparse+peakedness-gate only;
   // dense is opt-in for callers that can amortize the load across calls.
-  const result = await runRoute(index, prompt, { ...config, graphPath, factors, denseEnabled: false });
-  if (!result || result.length === 0) return;
+  const routed = await runRoute(index, prompt, { ...config, graphPath, factors, denseEnabled: false });
+  if (!routed || routed.length === 0) return;
 
-  const alreadySuggestedIds = sessionSuggestedIds(ROOT, payload.session_id ?? null);
-  const block = formatBlock(result, config.pushBudgetChars, payloadCwd(payload), args.host, alreadySuggestedIds);
+  // Push precision gate (2026-07-09): an unsolicited interruption needs a
+  // much higher bar than a solicited MCP route() lookup - see
+  // router.config.yaml's pushMinConfidence comment (alert fatigue). Curated
+  // required-tier entries keep their deliberately-authored pass.
+  const result = routed.filter(
+    (hit) => hit.tier === "required" || hit.confidence >= config.pushMinConfidence,
+  );
+  if (result.length === 0) return;
+
+  const mentionCounts = sessionSuggestedCounts(ROOT, payload.session_id ?? null);
+  const { block, renderedIds } = formatBlock(
+    result,
+    config.pushBudgetChars,
+    payloadCwd(payload),
+    args.host,
+    mentionCounts,
+    config.pushMaxMentionsPerSession,
+  );
   if (!block) return;
 
-  for (const hit of result) {
-    logEvent(ROOT, { type: "suggested", id: hit.id, prompt, sessionId: payload.session_id ?? null });
+  for (const id of renderedIds) {
+    logEvent(ROOT, { type: "suggested", id, prompt, sessionId: payload.session_id ?? null });
   }
 
   process.stdout.write(JSON.stringify(outputAdditionalContext(args.host, args.nativeEvent, block)));

@@ -41,6 +41,18 @@ const DEFAULTS = {
   // id per session since repeats render tersely) - kept in sync here so a
   // project with no router.config.yaml at all still gets the same fix.
   pushBudgetChars: 640,
+  // Push (unsolicited injection) needs much higher precision than pull
+  // (Claude asked via MCP route()) - advisory-systems literature calls the
+  // failure mode alert fatigue: interruptions that are wrong even
+  // occasionally get tuned out entirely, killing the channel. Hits below
+  // this calibrated confidence are dropped from push output unless they are
+  // required-tier (curated recipe entries, deliberately authored triggers).
+  // Pull is unaffected - recall stays generous when the caller asked.
+  pushMinConfidence: 0.75,
+  // Interrupt budget: how many times one capability may be rendered per
+  // session before going silent (full line, then terse reminder, then
+  // nothing). An assistant that reminds twice and then shuts up.
+  pushMaxMentionsPerSession: 2,
 };
 
 export function loadConfig(path = "router.config.yaml") {
@@ -70,5 +82,11 @@ export function loadConfig(path = "router.config.yaml") {
       typeof raw.denseThreshold === "number" ? raw.denseThreshold : DEFAULTS.denseThreshold,
     pushBudgetChars:
       typeof raw.pushBudgetChars === "number" ? raw.pushBudgetChars : DEFAULTS.pushBudgetChars,
+    pushMinConfidence:
+      typeof raw.pushMinConfidence === "number" ? raw.pushMinConfidence : DEFAULTS.pushMinConfidence,
+    pushMaxMentionsPerSession:
+      typeof raw.pushMaxMentionsPerSession === "number"
+        ? raw.pushMaxMentionsPerSession
+        : DEFAULTS.pushMaxMentionsPerSession,
   };
 }

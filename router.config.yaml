@@ -100,3 +100,15 @@ denseThreshold: 0.6
 # session, not every turn - 640 fits ~2 full mcp lines or a full
 # skill+agent+tool combo comfortably.
 pushBudgetChars: 640
+# Push/pull asymmetry (2026-07-09 audit): push is an unsolicited interruption,
+# pull (MCP route()) is a solicited lookup. Advisory-systems literature calls
+# the push failure mode alert fatigue - CDSS systems with 90%+ override rates
+# get tuned out entirely, and this repo's own feedback log was at 22/26
+# suggestions ignored. Push therefore drops any hit below this calibrated
+# confidence unless it's required-tier (curated recipe.yaml entries); pull
+# keeps generous recall untouched.
+pushMinConfidence: 0.75
+# Interrupt budget per capability per session: full line once, terse reminder
+# once, then silent. (Repeat-terse already existed via sessionSuggestedIds;
+# this adds the "then shut up" cap.)
+pushMaxMentionsPerSession: 2

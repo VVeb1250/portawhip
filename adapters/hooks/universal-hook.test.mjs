@@ -165,6 +165,24 @@ test("resolveId: an unescaped '.' would false-match a lookalike command; escaped
   assert.equal(id, null);
 });
 
+test("universal-hook: third mention of the same id in one session is silent (interrupt budget)", () => {
+  clearFeedback();
+  try {
+    const args = ["--host", "claude-code", "--event", "user_prompt", "--nativeEvent", "UserPromptSubmit"];
+    const payload = { prompt: "search codebase for the word foo", session_id: "test-session-budget" };
+
+    const first = JSON.parse(runHook(args, payload));
+    assert.match(first.hookSpecificOutput.additionalContext, /run it directly now/);
+    const second = JSON.parse(runHook(args, payload));
+    assert.match(second.hookSpecificOutput.additionalContext, /still relevant/);
+    // Budget (pushMaxMentionsPerSession=2) spent: full once, terse once, then silence.
+    const third = runHook(args, payload);
+    assert.equal(third, "");
+  } finally {
+    restoreFeedback();
+  }
+});
+
 test("universal-hook: user_prompt stays silent on a harness-generated task-notification payload", () => {
   clearFeedback();
   try {
