@@ -15,7 +15,8 @@ import { loadConfig } from "../core/config.mjs";
 import { computeFactors, logEvent } from "../core/feedback.mjs";
 import { stackFactors, combineFactors } from "../core/stack-detect.mjs";
 import { readActiveSelection, resolveRecipePaths } from "../core/bundle-state.mjs";
-import { warmDense } from "../core/dense-embedder.mjs";
+import { warmDense, setDenseCachePath, primeDocCache } from "../core/dense-embedder.mjs";
+import { buildCapabilityDocs } from "../core/capability-docs.mjs";
 
 // This server is registered globally (add-mcp may promote project scope to
 // global depending on the host), so a caller can invoke it from ANY cwd —
@@ -90,6 +91,20 @@ server.tool(
 // can't be loaded (dense degrades to sparse-only). If dense is disabled in
 // config, the warm still completes harmlessly and simply never gets used.
 warmDense();
+
+// Doc-embedding cache: persisted to disk (survives this process restarting,
+// which happens every session) AND primed here at boot, in the background,
+// overlapping the model load above - so the FIRST interactive route() call
+// after warm doesn't land on 559 uncached docs being embedded one-by-one in
+// its own request (found live: 67-104s route() latency from exactly this -
+// denseBlock:false only ever guarded the model load, never this). Fire and
+// forget: no client is waiting on server boot, and denseRetrieve's own
+// on-demand embed path still covers any doc this background pass hasn't
+// reached yet.
+setDenseCachePath(join(ROOT, ".hp-state", "dense-cache.json"));
+loadIndex(RECIPE_PATHS)
+  .then((index) => primeDocCache(buildCapabilityDocs(index)))
+  .catch(() => {});
 
 const transport = new StdioServerTransport();
 await server.connect(transport);

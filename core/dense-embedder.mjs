@@ -14,6 +14,9 @@
 // the model/network isn't available (PLAN.md Phase 4 spec): every export
 // here fails soft (returns [] / null), never throws into the caller.
 
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname } from "node:path";
+
 const MODEL_ID = "Xenova/bge-m3";
 
 // The resolved pipeline, or null until the (slow) first load finishes. Kept
@@ -67,6 +70,85 @@ export function warmDense() {
 // it across every route() call for the life of the process.
 const embeddingCache = new Map();
 
+// Persists embeddingCache to disk so a fresh MCP server process (a new one
+// per Claude Code session, not a single long-lived daemon) doesn't re-pay the
+// "ready-but-cache-cold" trap on every restart: found live, route() latency
+// of 67-104s on the first request after model warm, because 559 capability
+// docs were being embedded one-by-one in that request's hot path. Keying is
+// still by id+text (embeddingCache's own key), so a changed doc text just
+// misses the disk entry instead of serving a stale vector - no separate
+// invalidation hash needed.
+let diskCachePath = null;
+let diskCacheLoaded = false;
+let primeInFlight = null;
+
+// Called once at server boot (see server/mcp-server.mjs) so denseRetrieve and
+// primeDocCache below know where to read/write the persisted cache. Never
+// throws - a caller that skips this just gets the always-worked in-memory-only
+// behavior.
+export function setDenseCachePath(path) {
+  diskCachePath = path;
+}
+
+function ensureDiskCacheLoaded() {
+  if (diskCacheLoaded || !diskCachePath) return;
+  diskCacheLoaded = true;
+  try {
+    if (!existsSync(diskCachePath)) return;
+    const raw = JSON.parse(readFileSync(diskCachePath, "utf8"));
+    for (const [key, vector] of Object.entries(raw)) {
+      if (!embeddingCache.has(key)) embeddingCache.set(key, vector);
+    }
+  } catch {
+    // Corrupt/unreadable cache file - proceed as if it never existed.
+  }
+}
+
+function persistDiskCache() {
+  if (!diskCachePath) return;
+  try {
+    mkdirSync(dirname(diskCachePath), { recursive: true });
+    writeFileSync(diskCachePath, JSON.stringify(Object.fromEntries(embeddingCache)));
+  } catch {
+    // Best-effort - a failed write just means next boot re-embeds.
+  }
+}
+
+// Warms the doc-embedding cache in the BACKGROUND, deliberately called
+// separately from warmDense() (which only starts the model load) so a caller
+// controls exactly when the (docs, not just model) priming kicks off - here,
+// right after loadIndex() at server boot, overlapping the idle time before
+// the first real route() call instead of landing inside it. Safe to call
+// concurrently/repeatedly: dedupes via primeInFlight, and every doc is a
+// no-op past the first time it's embedded (same embeddingCache the request
+// path reads).
+export async function primeDocCache(docs) {
+  ensureDiskCacheLoaded();
+  if (primeInFlight) return primeInFlight;
+  primeInFlight = (async () => {
+    const ready = await startWarm();
+    if (!ready) return;
+    let embeddedAny = false;
+    for (const doc of docs) {
+      const key = `${doc.id}::${docText(doc)}`;
+      if (embeddingCache.has(key)) continue;
+      try {
+        embeddingCache.set(key, await embed(ready, docText(doc)));
+        embeddedAny = true;
+      } catch {
+        unavailable = true;
+        return;
+      }
+    }
+    if (embeddedAny) persistDiskCache();
+  })();
+  try {
+    await primeInFlight;
+  } finally {
+    primeInFlight = null;
+  }
+}
+
 function docText(doc) {
   return [doc.id, (doc.triggers ?? []).join(" "), doc.description ?? ""].join(" ");
 }
@@ -103,6 +185,7 @@ async function embedDoc(extractor, doc) {
 export async function denseRetrieve(docs, query, { k = 20, minScore = 0.6, block = true } = {}) {
   if (docs.length === 0) return [];
   if (unavailable) return [];
+  ensureDiskCacheLoaded();
   if (!extractor) {
     const pending = startWarm();
     if (!block) return [];
