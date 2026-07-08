@@ -102,3 +102,28 @@ test("feedback: log file is pruned once it crosses the size threshold", () => {
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+test("feedback: suggestions fired on synthetic prompts are ignored, not counted as decay", () => {
+  const root = tempRoot();
+  try {
+    // 21/26 historical suggested events were harness task-notifications
+    // (2026-07-09 audit) - each would count as an "ignored" outcome and
+    // decay the capability on pure noise. The read-side filter must skip
+    // them without touching the append-only log.
+    for (let i = 0; i < 5; i += 1) {
+      logEvent(root, {
+        type: "suggested",
+        id: "ripgrep",
+        prompt: "<task-notification>\n<task-id>x</task-id>\n<summary>done</summary>\n</task-notification>",
+      });
+    }
+    // One genuine suggested->used pair: the only signal that should count.
+    logEvent(root, { type: "suggested", id: "ripgrep", prompt: "search codebase for foo" });
+    logEvent(root, { type: "used", id: "ripgrep", tool: "Bash" });
+    const factors = computeFactors(root);
+    assert.equal(factors.get("ripgrep"), 1.2); // single-hit boost, no noise decay mixed in
+    assert.equal(readEvents(root).length, 7); // log itself untouched
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});

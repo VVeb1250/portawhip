@@ -18,6 +18,7 @@ import { loadConfig } from "../../core/config.mjs";
 import { computeFactors, logEvent, readEvents } from "../../core/feedback.mjs";
 import { stackFactors, combineFactors } from "../../core/stack-detect.mjs";
 import { readActiveSelection, resolveRecipePaths } from "../../core/bundle-state.mjs";
+import { isSyntheticPrompt } from "../../core/prompt-hygiene.mjs";
 
 const ROOT = dirname(dirname(dirname(fileURLToPath(import.meta.url))));
 // Whatever bundles were opted into via `scripts/bundles.mjs select` (foundry
@@ -149,6 +150,24 @@ export function resolveId(index, toolName, toolInput) {
     return index.entries.some((e) => e.id === id && e.type === "mcp") ? id : null;
   }
 
+  // Skill/Agent invocations are how MOST suggestions actually get acted on
+  // (352 skills + 90 agents vs 11 mcp/11 cli in today's index), yet neither
+  // had a branch here - so a suggested skill being used never logged a
+  // "used" event, boost never fired, and the 2026-07-09 hit-rate audit
+  // (4/26) was measuring with one eye shut. Host invocations may be
+  // plugin-namespaced ("ecc:code-review") while registry ids are plain
+  // slugs - match both the raw arg and the part after the last colon.
+  if (toolName === "Skill" || toolName === "Agent") {
+    const wantType = toolName === "Skill" ? "skill" : "agent";
+    const arg = String(
+      (toolName === "Skill" ? toolInput?.skill : toolInput?.subagent_type) ?? "",
+    );
+    if (!arg) return null;
+    const bare = arg.includes(":") ? arg.slice(arg.lastIndexOf(":") + 1) : arg;
+    const hit = index.entries.find((e) => e.type === wantType && (e.id === arg || e.id === bare));
+    return hit?.id ?? null;
+  }
+
   if (["Read", "read_file"].includes(toolName)) {
     const filePath = (toolInput?.file_path || toolInput?.path || "").replace(/\\/g, "/");
     if (!filePath) return null;
@@ -187,6 +206,11 @@ function toolFields(payload) {
 async function userPrompt(payload, args) {
   const prompt = promptFromPayload(payload);
   if (prompt.length < MIN_PROMPT_LEN || prompt.startsWith("/")) return;
+  // Harness-generated payloads (task notifications, system reminders) arrive
+  // through the same UserPromptSubmit channel as real typing - routing them
+  // was 81% of all suggested events and pure decay-noise for computeFactors
+  // (see core/prompt-hygiene.mjs for the live numbers).
+  if (isSyntheticPrompt(prompt)) return;
 
   const config = loadConfig(CONFIG_PATH);
   const index = await loadIndex(RECIPE_PATHS);

@@ -165,6 +165,65 @@ test("resolveId: an unescaped '.' would false-match a lookalike command; escaped
   assert.equal(id, null);
 });
 
+test("universal-hook: user_prompt stays silent on a harness-generated task-notification payload", () => {
+  clearFeedback();
+  try {
+    // Real shape from a live session: a background-task completion notice
+    // that arrives through UserPromptSubmit. Long enough and vocabulary-rich
+    // enough that it WOULD route (21/26 historical suggested events were
+    // exactly this) - only the synthetic-prompt gate keeps it silent.
+    const stdout = runHook(
+      ["--host", "claude-code", "--event", "user_prompt", "--nativeEvent", "UserPromptSubmit"],
+      {
+        prompt:
+          "<task-notification>\n<task-id>b9ugezqg8</task-id>\n<summary>Background command \"search codebase for the word foo\" completed (exit code 0)</summary>\n</task-notification>",
+      },
+    );
+    assert.equal(stdout, "");
+    assert.ok(!existsSync(FEEDBACK_PATH), "no suggested events should be logged for synthetic prompts");
+  } finally {
+    restoreFeedback();
+  }
+});
+
+test("universal-hook: post_tool with the Skill tool logs a used event for the skill id", () => {
+  clearFeedback();
+  try {
+    runHook(["--host", "claude-code", "--event", "post_tool"], {
+      tool_name: "Skill",
+      tool_input: { skill: "workspace-surface-audit" },
+    });
+    assert.ok(existsSync(FEEDBACK_PATH));
+    const contents = readFileSync(FEEDBACK_PATH, "utf8");
+    assert.ok(contents.includes('"type":"used"'));
+    assert.ok(contents.includes('"id":"workspace-surface-audit"'));
+  } finally {
+    restoreFeedback();
+  }
+});
+
+test("resolveId: a plugin-namespaced Skill invocation matches the plain-slug registry id", () => {
+  const index = {
+    entries: [{ id: "code-review", type: "skill", route: {} }],
+  };
+  assert.equal(resolveId(index, "Skill", { skill: "ecc:code-review" }), "code-review");
+});
+
+test("resolveId: an Agent invocation matches an agent entry by subagent_type, not a same-named skill", () => {
+  const index = {
+    entries: [
+      { id: "e2e-runner", type: "skill", route: {} },
+      { id: "e2e-runner", type: "agent", route: {} },
+    ],
+  };
+  // Both exist; the Agent tool must attribute to the agent-type entry.
+  const id = resolveId(index, "Agent", { subagent_type: "ecc:e2e-runner" });
+  assert.equal(id, "e2e-runner");
+  // And an id that only exists as a skill must NOT match via the Agent tool.
+  const skillOnly = { entries: [{ id: "pdf", type: "skill", route: {} }] };
+  assert.equal(resolveId(skillOnly, "Agent", { subagent_type: "pdf" }), null);
+});
+
 test("universal-hook: post_tool with an mcp__<id>__ tool name logs a used event for that id", () => {
   clearFeedback();
   try {

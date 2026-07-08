@@ -13,6 +13,7 @@
 
 import { appendFileSync, readFileSync, writeFileSync, existsSync, mkdirSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { isSyntheticPrompt } from "./prompt-hygiene.mjs";
 
 // Unbounded append-only growth was a real gap (found during a project
 // review, not a live incident): this log has no rotation, so heavy daily
@@ -71,6 +72,13 @@ export function computeFactors(root) {
   const byId = new Map();
   for (const e of events) {
     if (e.type !== "suggested" && e.type !== "used") continue;
+    // Read-side hygiene, not a log rewrite: suggestions fired against
+    // harness-generated payloads (the hook now skips them at the source, but
+    // 21/26 historical suggested events were exactly this) must not count as
+    // "ignored" outcomes - that decayed genuinely good capabilities on noise.
+    // Filtering here retroactively cleans history while keeping the JSONL
+    // append-only.
+    if (e.type === "suggested" && isSyntheticPrompt(e.prompt)) continue;
     if (!byId.has(e.id)) byId.set(e.id, []);
     byId.get(e.id).push(e);
   }
