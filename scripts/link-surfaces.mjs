@@ -16,6 +16,14 @@ import { basename, dirname, join, resolve } from "node:path";
 import { readActiveSelection, resolveRecipePaths } from "../core/bundle-state.mjs";
 import { readRawEntries } from "../core/registry.mjs";
 import { SURFACE_COPY_TARGETS } from "../core/surface-copy-targets.mjs";
+import { detectHosts } from "./hosts.mjs";
+
+// Present hosts = whatever add-mcp detects plus the extra hosts we detect
+// ourselves, as a Set for the copy-target presence gate.
+export async function presentHostSet() {
+  const hosts = await detectHosts();
+  return new Set([...(hosts.mcpHosts ?? []), ...(hosts.extraHosts ?? [])]);
+}
 
 const VALID_COMMANDS = new Set(["status", "install", "remove"]);
 const VALID_SCOPES = new Set(["project", "global"]);
@@ -88,6 +96,7 @@ export function collectSurfaceLinks({
   root = resolve("."),
   targets = SURFACE_COPY_TARGETS,
   entries = null,
+  presentHosts = null,
 } = {}) {
   const surfaceEntries =
     entries ??
@@ -98,6 +107,10 @@ export function collectSurfaceLinks({
 
   for (const entry of surfaceEntries) {
     for (const hostId of Object.keys(targets)) {
+      // Only fan out to hosts actually present, so we never create a config
+      // dir (e.g. ~/.pi) for a host that isn't installed. null = don't gate
+      // (tests inject their own targets and want every row).
+      if (presentHosts && !presentHosts.has(hostId)) continue;
       const perType = (targets[hostId]?.[entry.type] ?? []).filter((t) => t.scope === scope);
       for (const target of perType) {
         const row = planRow({ entry, hostId, type: entry.type, target });
@@ -145,9 +158,13 @@ function parseArgs(argv) {
   return args;
 }
 
-function main() {
+async function main() {
   const args = parseArgs(process.argv);
-  const result = collectSurfaceLinks({ command: args.command, scope: args.scope });
+  const result = collectSurfaceLinks({
+    command: args.command,
+    scope: args.scope,
+    presentHosts: await presentHostSet(),
+  });
   if (args.json) {
     console.log(JSON.stringify(result, null, 2));
   } else {
@@ -164,10 +181,8 @@ import { pathToFileURL } from "node:url";
 
 const isMain = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
 if (isMain) {
-  try {
-    main();
-  } catch (error) {
+  main().catch((error) => {
     console.error(error.message);
     process.exitCode = 1;
-  }
+  });
 }

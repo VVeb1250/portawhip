@@ -9,6 +9,7 @@
 
 import { detectGlobalAgents } from "add-mcp";
 import spawnSync from "cross-spawn";
+import { detectExtraHosts } from "../core/extra-hosts.mjs";
 
 // add-mcp and asm are independent projects that each picked their own id
 // strings for the same real-world tool. This table is unavoidable glue
@@ -49,5 +50,11 @@ export async function detectHosts() {
     .map((id) => ADD_MCP_TO_ASM[id])
     .filter((name) => name && asmProviders.includes(name));
 
-  return { mcpHosts, skillHosts };
+  // Hosts add-mcp doesn't catalogue yet (Pi, Amp, …), detected by their own
+  // config dir. Kept in a separate field so add-mcp's MCP-linking path is
+  // never handed a host it doesn't know; the instruction/command lanes that
+  // opt in read this explicitly.
+  const extraHosts = detectExtraHosts();
+
+  return { mcpHosts, skillHosts, extraHosts };
 }

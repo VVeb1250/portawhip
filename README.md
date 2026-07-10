@@ -8,10 +8,14 @@ everything into context up front.
 
 Two halves:
 
-1. **Loader** — declare a capability once in `recipe.yaml`, it gets
-   dispatched to whichever backend already solves that install problem well
-   (`add-mcp` for MCP servers, `mise` for CLI tools, `agent-skill-manager`
-   for skills). No install logic of its own, no hardcoded host list.
+1. **Loader / cross-host sync** — declare a capability once in `recipe.yaml`,
+   it gets dispatched to whichever backend already solves that install problem
+   well (`add-mcp` for MCP servers, `mise` for CLI tools, `agent-skill-manager`
+   for skills). On top of that, a **sync connector** reads what's already
+   installed across every host, promotes it into a shared canonical set, and
+   fans it out to all the others — tools, skills, commands, agents, and
+   (inventory) embedded hooks. No install logic of its own, no hardcoded host
+   list.
 2. **Router** — a hybrid lexical + dense-semantic retrieval engine (the
    semantic channel runs on a local embedding model that downloads and
    caches itself on first use, no manual setup) over both curated
@@ -102,6 +106,42 @@ Built-in profiles:
 - `ai-project-mcp` — project-scope MCP only.
 - `asm-status` — agent-skill-manager provider probe.
 - `agents-check` — `.agents` source-of-truth status/check.
+
+## Cross-host capability sync
+
+Bring a capability that's installed in one host into the shared set, and let
+every other host pick it up.
+
+```bash
+npm run import                 # grouped: what's installed but not yet canonical
+npm run import:preview         # same, as a plan
+node scripts/import-surfaces.mjs apply --apply --type cli,mcp   # promote (auto-enriched)
+npm run sync-surfaces sync     # fan canonical out to all detected hosts
+npm run hooks:embedded         # inventory hooks bundled inside skills/plugins
+```
+
+- **Import is manual, fan-out is automatic.** You choose what becomes
+  canonical; a session-start hook then keeps every host in sync in the
+  background (`autoSync` in `router.config.yaml`, throttled). Import never
+  runs on its own.
+- **CLI entries are auto-enriched** on import (mise registry → package
+  registry → tldr → `--help`), so a bare `rg` routes on "search / grep /
+  regex", not just its own name — no LLM involved.
+- **Embedded hooks are inventoried, not linked.** Activating a third-party
+  hook is a trust boundary; portawhip shows you what's there and stops.
+- The `portawhip` management skill wraps this whole workflow — a connected
+  agent can drive it when you ask to import/sync tools.
+
+## Host support
+
+portawhip syncs across Claude Code, Codex, Gemini CLI, Cursor, VS Code /
+Copilot, OpenCode, Zed, Windsurf, Cline, plus Pi and Amp — each to the extent
+its config surface allows. See **[`docs/host-support.md`](docs/host-support.md)**
+for the full per-surface matrix and the concrete reason behind every gap
+(e.g. Gemini commands are TOML not markdown; several hosts have no lifecycle
+hook API). Detection is delegated to `add-mcp` plus a presence-checked
+supplementary detector — a host is only ever targeted when it's actually
+installed.
 
 ## Status
 

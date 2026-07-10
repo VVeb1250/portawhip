@@ -170,6 +170,23 @@ export const CONNECTOR_TARGETS = {
       },
     ],
   },
+  // Pi (earendil-works/pi): reads AGENTS.md walking up from cwd, plus a global
+  // ~/.pi/agent/AGENTS.md. Both are shared instruction files -> marker upsert.
+  // Source: https://github.com/badlogic/pi-mono/blob/main/packages/coding-agent/README.md
+  pi: {
+    instructionTargets: [
+      { scope: "global", path: homePath(".pi", "agent", "AGENTS.md"), variant: "generic" },
+      { scope: "project", path: projectPath("AGENTS.md"), variant: "generic" },
+    ],
+  },
+  // Sourcegraph Amp: reads project AGENTS.md and a personal ~/.config/AGENTS.md.
+  // Source: https://ampcode.com/manual
+  amp: {
+    instructionTargets: [
+      { scope: "global", path: homePath(".config", "AGENTS.md"), variant: "generic" },
+      { scope: "project", path: projectPath("AGENTS.md"), variant: "generic" },
+    ],
+  },
   vscode: {
     instructionTargets: [
       {

@@ -140,7 +140,20 @@ export async function collectConnectorLinks({ command = "status", scope = "proje
     }
   }
 
-  return { command, scope, hostIds, rows };
+  // Extra hosts add-mcp doesn't catalogue (Pi, Amp, …), present on this
+  // machine: instruction linking only. mcpStatus is "n/a" — we never hand
+  // these to add-mcp's MCP linker, which doesn't know them.
+  for (const hostId of hosts.extraHosts ?? []) {
+    const targets = targetsForScope(hostId, scope);
+    for (const target of targets) {
+      const result = applyTarget(command, target);
+      const instructionStatus =
+        command === "status" ? (result.linked ? "linked" : "missing") : result.changed ? "changed" : "no-op";
+      rows.push({ type: "connector", hostId, scope, mcpStatus: "n/a", instructionStatus, path: target.path, supported: true });
+    }
+  }
+
+  return { command, scope, hostIds, extraHostIds: hosts.extraHosts ?? [], rows };
 }
 
 async function main() {

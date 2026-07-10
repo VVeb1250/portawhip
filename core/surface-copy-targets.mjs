@@ -27,6 +27,13 @@ export const SURFACE_COPY_TARGETS = {
     command: [{ scope: "global", format: "toml", unsupported: true }],
     agent: [{ scope: "global", format: "unknown", unsupported: true }],
   },
+  // Pi: prompt templates (its slash-command equivalent) are markdown under
+  // ~/.pi/agent/prompts. No native subagents -> agent unsupported.
+  // Source: https://github.com/badlogic/pi-mono/blob/main/packages/coding-agent/README.md
+  pi: {
+    command: [{ scope: "global", dir: join(HOME, ".pi", "agent", "prompts"), format: "md" }],
+    agent: [{ scope: "global", format: "none", unsupported: true }],
+  },
 };
 
 export function copyTargetsFor(hostId, type, scope) {
