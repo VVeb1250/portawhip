@@ -87,7 +87,13 @@ function parseMarkdownFrontmatter(text, fallbackName) {
 function markdownFilesUnder(root, segmentName, maxDepth = SKILL_SCAN_MAX_DEPTH) {
   const found = [];
   if (!existsSync(root)) return found;
-  const stack = [{ dir: root, depth: 0, inSegment: false }];
+  // When the root itself IS the segment dir (a host-native leaf like
+  // ~/.claude/commands), start already in-segment so its .md files are
+  // collected directly — without this, only the segment-walk case (a
+  // "commands"/"agents" dir nested in a plugin tree) is found, and the
+  // host-native user dirs are silently missed.
+  const startInSegment = root.split(/[\\/]/).pop() === segmentName;
+  const stack = [{ dir: root, depth: 0, inSegment: startInSegment }];
   while (stack.length > 0) {
     const { dir, depth, inSegment } = stack.pop();
     let dirents;
@@ -162,6 +168,30 @@ export function defaultPluginRoots() {
   return [
     join(homedir(), ".claude", "plugins", "cache"),
     join(homedir(), ".claude", "plugins", "marketplaces"),
+  ];
+}
+
+// Host-native command/agent dirs (leaf dirs whose basename IS the segment, so
+// markdownFilesUnder collects them directly), on top of the plugin roots.
+// Data catalog, not decision logic — each path is a documented host
+// convention (Claude Code: ~/.claude/{commands,agents} + project .claude/…).
+// Codex prompts (~/.codex/prompts) use a different segment name and are added
+// once a codex install is present to verify against. cwd-relative project
+// dirs are resolved by the caller's process cwd, matching the router's
+// per-project behavior.
+export function defaultCommandRoots() {
+  return [
+    ...defaultPluginRoots(),
+    join(homedir(), ".claude", "commands"),
+    resolve(".claude", "commands"),
+  ];
+}
+
+export function defaultAgentRoots() {
+  return [
+    ...defaultPluginRoots(),
+    join(homedir(), ".claude", "agents"),
+    resolve(".claude", "agents"),
   ];
 }
 
@@ -324,11 +354,11 @@ export function discoverCli(enrichCachePath) {
   });
 }
 
-export function discoverCommands(roots = defaultPluginRoots()) {
+export function discoverCommands(roots = defaultCommandRoots()) {
   return discoverMarkdownSurface("command", "commands", roots);
 }
 
-export function discoverAgents(roots = defaultPluginRoots()) {
+export function discoverAgents(roots = defaultAgentRoots()) {
   return discoverMarkdownSurface("agent", "agents", roots);
 }
 

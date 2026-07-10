@@ -31,7 +31,7 @@
     "bundles": "node scripts/bundles.mjs list",
     "bundles:status": "node scripts/bundles.mjs status",
     "bundles:select": "node scripts/bundles.mjs select",
-    "test": "node --test core/router.test.mjs core/router-live.test.mjs core/feedback.test.mjs core/stack-detect.test.mjs core/concept-vector.test.mjs core/eval-harvest.test.mjs core/enrich.test.mjs core/cli-enrich.test.mjs core/bundle-state.test.mjs core/surface-matrix.test.mjs scripts/link-hooks.test.mjs scripts/link-connectors.test.mjs scripts/sync-config.test.mjs scripts/sync-surfaces.test.mjs scripts/import-surfaces.test.mjs scripts/auto-sync.test.mjs scripts/agents-surface.test.mjs adapters/hooks/universal-hook.test.mjs adapters/hooks/hook-stub.test.mjs server/mcp-server.test.mjs",
+    "test": "node --test core/router.test.mjs core/router-live.test.mjs core/feedback.test.mjs core/stack-detect.test.mjs core/concept-vector.test.mjs core/eval-harvest.test.mjs core/enrich.test.mjs core/cli-enrich.test.mjs core/bundle-state.test.mjs core/surface-matrix.test.mjs core/discover-surface.test.mjs scripts/link-hooks.test.mjs scripts/link-connectors.test.mjs scripts/sync-config.test.mjs scripts/sync-surfaces.test.mjs scripts/link-surfaces.test.mjs scripts/import-surfaces.test.mjs scripts/auto-sync.test.mjs scripts/agents-surface.test.mjs adapters/hooks/universal-hook.test.mjs adapters/hooks/hook-stub.test.mjs server/mcp-server.test.mjs",
     "route": "node core/router-cli.mjs route",
     "route:list": "node core/router-cli.mjs list",
     "route:eval": "node core/router-cli.mjs eval --engine hybrid",

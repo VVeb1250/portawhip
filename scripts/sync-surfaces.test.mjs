@@ -53,10 +53,14 @@ test("sync-surfaces: check runs agents sync --check and does not install CLI/ski
       return true;
     },
   });
-  assert.equal(result.lanes.length, 2);
+  assert.equal(result.lanes.length, 3);
   assert.equal(result.lanes[0].lane, "mcp");
   assert.deepEqual(calls[0][1], ["sync", "--verbose", "--check"]);
   assert.equal(result.lanes[1].lane, "cli+skills");
   assert.equal(result.lanes[1].action, "planned");
   assert.equal(result.lanes[1].count, 2);
+  // Phase S2: commands+agents managed-copy lane. The temp recipe has no
+  // command/agent entries, so it plans zero targets but the lane is present.
+  assert.equal(result.lanes[2].lane, "commands+agents");
+  assert.equal(result.lanes[2].action, "planned");
 });

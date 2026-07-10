@@ -49,22 +49,20 @@ surfaces:
   - id: command
     label: Slash commands
     read:
-      owner: "discover.mjs:discoverCommands"
+      owner: "discover.mjs:discoverCommands (+ host-native dirs)"
       probe: { kind: discover, fn: commands }
     write:
-      owner: null
-      gap: missing
-      note: "No backend writes slash commands to host command dirs yet (Phase S2)."
+      owner: "link-surfaces.mjs (managed-copy)"
+      probe: { kind: command, argv: [node, scripts/link-surfaces.mjs, status] }
 
   - id: agent
     label: Subagent defs
     read:
-      owner: "discover.mjs:discoverAgents"
+      owner: "discover.mjs:discoverAgents (+ host-native dirs)"
       probe: { kind: discover, fn: agents }
     write:
-      owner: "ai-config-sync (claude<->codex only)"
-      gap: partial
-      note: "ai-config-sync claims agents for claude/codex; >2-host write is Phase S2."
+      owner: "link-surfaces.mjs (managed-copy; gemini unsupported)"
+      probe: { kind: command, argv: [node, scripts/link-surfaces.mjs, status] }
 
   - id: hook-declared
     label: Hooks (declared)

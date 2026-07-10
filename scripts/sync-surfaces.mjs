@@ -7,6 +7,7 @@ import { activeSelectionPathFor, readActiveSelection, resolveRecipePaths } from 
 import { mergeRawEntries } from "../core/registry.mjs";
 import { detectHosts } from "./hosts.mjs";
 import { installEntries } from "./load.mjs";
+import { collectSurfaceLinks } from "./link-surfaces.mjs";
 
 const VALID_COMMANDS = new Set(["sync", "check", "watch"]);
 const INSTALL_TYPES = new Set(["cli", "skill"]);
@@ -97,6 +98,8 @@ export async function syncSurfaces({ root = resolve("."), scope = "project", che
       action: "planned",
       count: installEntriesForSync.length,
     });
+    const surfacePlan = collectSurfaceLinks({ command: "status", scope, root: absoluteRoot });
+    result.lanes.push(surfaceLane(surfacePlan, "planned"));
     return result;
   }
 
@@ -110,7 +113,28 @@ export async function syncSurfaces({ root = resolve("."), scope = "project", che
     count: installResults.length,
     results: installResults,
   });
+
+  // Commands + agents: mise/asm don't install these, so fan them out by
+  // managed-copy into each markdown-host's native dir (Phase S2 write).
+  const surfaceResult = collectSurfaceLinks({ command: "install", scope, root: absoluteRoot });
+  result.lanes.push(surfaceLane(surfaceResult, "sync"));
   return result;
+}
+
+// A copy target only "fails" if it errored; source/unsupported/linked/missing
+// are all expected, non-failing states.
+function surfaceLane(plan, action) {
+  const copied = plan.rows.filter((r) => r.changed).length;
+  const unsupported = plan.rows.filter((r) => r.status === "unsupported").length;
+  return {
+    lane: "commands+agents",
+    backend: "link-surfaces (managed-copy)",
+    ok: plan.rows.every((r) => r.status !== "error"),
+    action,
+    count: plan.rows.length,
+    copied,
+    unsupported,
+  };
 }
 
 function sourceFiles(root) {
