@@ -63,6 +63,31 @@ test("sync-config: .agents preview maps to sync --check", () => {
   assert.deepEqual(buildBackendArgs(".agents", "preview"), ["sync", "--check"]);
 });
 
+test("sync-config: .agents preview planned changes are not install failures", () => {
+  const runner = () => ({
+    status: 1,
+    stdout: "\u001b[36m[info]\u001b[39m Would update 1 item(s):\n  -> .agents/agents.json\n",
+    stderr: "",
+  });
+  const row = runBackend("agents-dotdir", "preview", {}, runner);
+  assert.equal(row.ok, true);
+  assert.equal(row.status, "changed");
+  assert.equal(row.installHint, null);
+  assert.match(row.summary, /planned changes/);
+});
+
+test("sync-config: collect marks probe-only unsupported actions without failing all", () => {
+  const result = collectSyncConfig({
+    action: "preview",
+    backends: ["agent-skill-manager"],
+    options: {},
+  });
+  assert.equal(result.status, "success");
+  assert.equal(result.rows[0].ok, true);
+  assert.equal(result.rows[0].status, "unsupported");
+  assert.match(result.rows[0].summary, /does not support preview/);
+});
+
 test("sync-config: collect reports backend output in stable shape", () => {
   const calls = [];
   const runner = (cmd, args) => {

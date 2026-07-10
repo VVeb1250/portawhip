@@ -78,6 +78,33 @@
     inject: hint
     action: inspect_code
 
+- id: portawhip
+  # This repo's own management skill (skills/portawhip/SKILL.md). Curated so
+  # the router surfaces it when the user talks about importing/syncing tools
+  # across hosts. install:false — it lives in-repo and is read via the pointer,
+  # like the other instruction-backed skills below.
+  type: skill
+  source: portawhip
+  path: skills/portawhip
+  install: false
+  route:
+    triggers:
+      [
+        "import capability",
+        "import tool",
+        "sync tools across hosts",
+        "share skill across hosts",
+        "fan out to all hosts",
+        "manage portawhip",
+        "surface coverage matrix",
+        "what capabilities are synced",
+        "import newly installed",
+      ]
+    description: "Manage portawhip cross-host capability sync: import, enrich, check coverage, fan out to all hosts"
+    when: [user_prompt]
+    inject: hint
+    action: read_skill
+
 - id: workspace-surface-audit
   type: skill
   source: workspace-surface-audit

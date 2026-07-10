@@ -5,7 +5,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { homedir } from "node:os";
 import { detectHosts } from "./hosts.mjs";
-import { HOOK_TARGETS, LOGICAL_HOOKS, hookTargetForHost } from "../core/hook-targets.mjs";
+import { HOOK_TARGETS, LOGICAL_HOOKS, LOGICAL_EVENT_TO_MANIFEST, hookTargetForHost } from "../core/hook-targets.mjs";
 
 const VALID_COMMANDS = new Set(["status", "install", "remove"]);
 const VALID_SCOPES = new Set(["project", "global"]);
@@ -73,8 +73,8 @@ function eventGroup(hostId, logicalEvent, nativeEvent, format) {
   };
   if (format === "gemini-settings-json") {
     base.hooks[0].name = `harness-router-${logicalEvent}`;
-    const manifestKey = logicalEvent === "user_prompt" ? "route-on-prompt" : "mark-tool-feedback";
-    base.hooks[0].description = LOGICAL_HOOKS[manifestKey].description;
+    const manifestKey = LOGICAL_EVENT_TO_MANIFEST[logicalEvent];
+    if (manifestKey) base.hooks[0].description = LOGICAL_HOOKS[manifestKey].description;
     base.sequential = false;
   }
   return Object.fromEntries(Object.entries(base).filter(([, value]) => value !== undefined));

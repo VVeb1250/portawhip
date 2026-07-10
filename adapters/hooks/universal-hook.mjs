@@ -9,6 +9,7 @@
 //   post_tool   -> mark suggested capabilities as used
 
 import { existsSync } from "node:fs";
+import spawn from "cross-spawn";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { dirname, join, isAbsolute } from "node:path";
 import { loadIndex, readCachedIndex } from "../../core/registry.mjs";
@@ -295,8 +296,32 @@ async function postTool(payload, args) {
   process.stdout.write(JSON.stringify(outputAdditionalContext(args.host, args.nativeEvent, nudge)));
 }
 
+// Session start: fire-and-forget the auto-sync worker (decision D). This hook
+// must return instantly, so it detaches a fully independent process and
+// unrefs it — the worker throttles/locks and fans already-canonical
+// capabilities out to all hosts on its own, logging to
+// .hp-state/auto-sync.log. Import stays manual; this only propagates what is
+// already canonical. Any failure stays inside the worker; the session is
+// never blocked or delayed.
+function sessionStart() {
+  try {
+    const child = spawn.spawn(process.execPath, [join(ROOT, "scripts", "auto-sync.mjs")], {
+      cwd: ROOT,
+      detached: true,
+      stdio: "ignore",
+    });
+    child.unref();
+  } catch {
+    // fail-open: never block session start on a spawn error
+  }
+}
+
 async function main() {
   const args = parseArgs(process.argv);
+  if (args.event === "session_start") {
+    sessionStart();
+    return;
+  }
   const payload = await readStdinJson();
   if (args.event === "user_prompt") await userPrompt(payload, args);
   if (args.event === "post_tool") await postTool(payload, args);

@@ -1,0 +1,96 @@
+# Surface coverage matrix — DATA ONLY (Phase S0).
+#
+# Rows = the portable surfaces the connector is meant to sync. For each
+# direction (read=import from hosts, write=fan-out to hosts) this file
+# declares WHICH backend owns the lane, or a declared gap (missing/
+# unsupported) where no lane exists yet. It never asserts a live status:
+# core/surface-matrix.mjs live-probes every declared owner and reports what
+# it actually finds (VISION.md: live-probe, never overclaim). The host axis
+# stays dynamic — resolved at runtime from detectHosts(), never listed here.
+#
+# probe kinds interpreted by surface-matrix.mjs:
+#   command        : run argv; covered if the backend command resolves + exits 0
+#   discover       : call core/discover.mjs <fn>; covered if it returns items
+#                    (count reported; 0 = lane works but nothing found)
+#   link-hooks     : scripts/link-hooks.mjs status; covered if any host linked
+#   link-connectors: scripts/link-connectors.mjs status; covered if any linked
+#   none           : no probe; status is the declared `gap`
+#
+# gap values: missing (no lane, planned) | unsupported (no host API) | partial
+
+surfaces:
+  - id: mcp
+    label: MCP servers
+    read:
+      owner: "discover.mjs:discoverMcp"
+      probe: { kind: discover, fn: mcp, heavy: true }
+    write:
+      owner: "add-mcp + agents-dotdir"
+      probe: { kind: command, argv: [agents, --version] }
+
+  - id: cli
+    label: CLI tools
+    read:
+      owner: "discover.mjs:discoverCli (mise ls)"
+      probe: { kind: discover, fn: cli }
+    write:
+      owner: "mise (via load.mjs)"
+      probe: { kind: command, argv: [mise, --version] }
+
+  - id: skill
+    label: Skills
+    read:
+      owner: "discover.mjs:discoverSkills"
+      probe: { kind: discover, fn: skills, heavy: true }
+    write:
+      owner: "agent-skill-manager (via load.mjs)"
+      probe: { kind: command, argv: [agent-skill-manager, --version] }
+
+  - id: command
+    label: Slash commands
+    read:
+      owner: "discover.mjs:discoverCommands"
+      probe: { kind: discover, fn: commands }
+    write:
+      owner: null
+      gap: missing
+      note: "No backend writes slash commands to host command dirs yet (Phase S2)."
+
+  - id: agent
+    label: Subagent defs
+    read:
+      owner: "discover.mjs:discoverAgents"
+      probe: { kind: discover, fn: agents }
+    write:
+      owner: "ai-config-sync (claude<->codex only)"
+      gap: partial
+      note: "ai-config-sync claims agents for claude/codex; >2-host write is Phase S2."
+
+  - id: hook-declared
+    label: Hooks (declared)
+    read:
+      owner: "hooks.manifest.yaml (curated)"
+      probe: { kind: command, argv: [node, scripts/link-hooks.mjs, status] }
+    write:
+      owner: "link-hooks.mjs (native-hook hosts)"
+      probe: { kind: link-hooks }
+
+  - id: hook-embedded
+    label: Hooks (embedded in skills/plugins)
+    read:
+      owner: null
+      gap: missing
+      note: "No scanner extracts hooks bundled inside skills/plugins/MCP packages yet (Phase S3)."
+    write:
+      owner: null
+      gap: missing
+      note: "Phase S3."
+
+  - id: instruction
+    label: Instructions / router link
+    read:
+      owner: "ai-config-sync (claude<->codex)"
+      probe: { kind: command, argv: [node, scripts/link-connectors.mjs, status] }
+    write:
+      owner: "ai-config-sync + link-connectors.mjs"
+      probe: { kind: link-connectors }

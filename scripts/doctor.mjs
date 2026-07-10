@@ -4,9 +4,15 @@
 // own list/audit command and reports pass/fail.
 
 import spawnSync from "cross-spawn";
+import { collectSurfaceMatrix } from "../core/surface-matrix.mjs";
 
 function parseArgs(argv) {
-  return { json: argv.includes("--json") };
+  return { json: argv.includes("--json"), heavy: argv.includes("--heavy") };
+}
+
+function cellText(cell) {
+  const count = cell.count != null ? `(${cell.count})` : "";
+  return `${cell.status}${count}`;
 }
 
 function capture(cmd, args) {
@@ -59,7 +65,7 @@ function checkConnectors(scope) {
   return { label: `instruction connectors (link-connectors.mjs, ${scope} scope)`, ok: r.ok, detail: r.output.trim() };
 }
 
-const { json } = parseArgs(process.argv.slice(2));
+const { json, heavy } = parseArgs(process.argv.slice(2));
 
 const checks = [
   checkMcp(),
@@ -72,9 +78,14 @@ const checks = [
   checkConnectors("global"),
 ];
 
+// Surface coverage matrix (Phase S0): live-probed read/write lane status per
+// portable surface. Light by default so `doctor` stays fast; `--heavy` runs
+// the full mcp/skill discovery counts.
+const matrix = await collectSurfaceMatrix({ heavy });
+
 if (json) {
   const ok = checks.every((c) => c.ok);
-  console.log(JSON.stringify({ status: ok ? "ok" : "fail", checks }, null, 2));
+  console.log(JSON.stringify({ status: ok ? "ok" : "fail", checks, matrix }, null, 2));
   process.exitCode = ok ? 0 : 1;
   process.exit();
 }
@@ -87,6 +98,14 @@ for (const c of checks) {
   if (!c.detail) continue;
   console.log(`\n--- ${c.label} ---`);
   console.log(c.detail);
+}
+
+console.log("\n== surface coverage matrix (read=import, write=fan-out) ==");
+for (const row of matrix.rows) {
+  console.log(`${row.label.padEnd(34)} read: ${cellText(row.read).padEnd(20)} write: ${cellText(row.write)}`);
+}
+if (matrix.summary.attention.length) {
+  console.log(`\nAttention (no lane / backend missing): ${matrix.summary.attention.join(", ")}`);
 }
 
 console.log(

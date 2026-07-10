@@ -129,16 +129,19 @@ export function runBackend(backendId, action, options = {}, runner = spawnSync.s
   const output = trimOutput(rawOutput);
   const parsed = parseLeadingJson(rawOutput);
   const innerErrors = parsed?.summary?.error ?? 0;
-  const ok = result.status === 0 && innerErrors === 0;
+  const plannedChanges = isPlannedChangeExit(backend.id, action, result.status, rawOutput);
+  const ok = (result.status === 0 || plannedChanges) && innerErrors === 0;
   return {
     backend: backend.id,
     label: backend.label,
     action,
     command: [invocation.command, ...invocation.args],
     ok,
-    status: ok ? "success" : "error",
+    status: plannedChanges ? "changed" : ok ? "success" : "error",
     summary: ok
-      ? `${backend.label} ${action} completed`
+      ? plannedChanges
+        ? `${backend.label} ${action} found planned changes`
+        : `${backend.label} ${action} completed`
       : innerErrors > 0
         ? `${backend.label} ${action} reported ${innerErrors} inner error(s)`
         : `${backend.label} ${action} failed`,
@@ -153,6 +156,15 @@ export function runBackend(backendId, action, options = {}, runner = spawnSync.s
         : [`Install or expose the backend command: ${backend.installHint}`, "Re-run sync-config status after install."],
     artifacts: [],
   };
+}
+
+function isPlannedChangeExit(backendId, action, status, output) {
+  return (
+    backendId === "agents-dotdir" &&
+    action === "preview" &&
+    status !== 0 &&
+    /\bWould (create|update|remove) \d+ item\(s\):/.test(output)
+  );
 }
 
 function trimOutput(output) {

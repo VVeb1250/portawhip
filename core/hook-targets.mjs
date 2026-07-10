@@ -20,7 +20,18 @@ export const LOGICAL_HOOKS = {
     logicalEvent: "post_tool",
     description: "Record whether a suggested capability was actually used.",
   },
+  "auto-sync-on-start": {
+    logicalEvent: "session_start",
+    description: "On session start, fan already-canonical capabilities out to all hosts in the background.",
+  },
 };
+
+// Which manifest hook backs each logical event — used for host formats that
+// want the hook's name/description (e.g. gemini). Generic lookup so adding a
+// logical event never needs a code change here.
+export const LOGICAL_EVENT_TO_MANIFEST = Object.fromEntries(
+  Object.entries(LOGICAL_HOOKS).map(([key, def]) => [def.logicalEvent, key]),
+);
 
 // Native hook surfaces only. Hosts with instruction/rules but no confirmed
 // lifecycle hook API are intentionally omitted and reported as unsupported.
@@ -35,6 +46,11 @@ export const HOOK_TARGETS = {
     events: {
       user_prompt: "UserPromptSubmit",
       post_tool: "PostToolUse",
+      // Session start fires the fire-and-forget auto-import worker. Claude
+      // Code is the one host with a confirmed native SessionStart event; the
+      // trigger only needs to exist on ONE host, since auto-import writes
+      // canonical + fans out to every other host from there.
+      session_start: "SessionStart",
     },
   },
   codex: {

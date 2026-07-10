@@ -9,4 +9,8 @@ hooks:
     logicalEvent: post_tool
     description: "Record whether a suggested MCP/CLI/skill capability was actually used."
     enabled: true
+  auto-sync-on-start:
+    logicalEvent: session_start
+    description: "On session start, fan already-canonical capabilities out to all hosts in the background."
+    enabled: true
 

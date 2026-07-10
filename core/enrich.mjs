@@ -29,6 +29,7 @@ import spawnSync from "cross-spawn";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+import { enrichCliLadder } from "./cli-enrich.mjs";
 
 export const DEFAULT_CACHE_PATH = join(".hp-state", "tool-descriptions.json");
 const MAX_DESCRIPTION_CHARS = 300;
@@ -198,10 +199,14 @@ function discoveredCliIds() {
   }
 }
 
-export async function runEnrichment({ cachePath = DEFAULT_CACHE_PATH, cliIds = null, timeoutMs = 8000 } = {}) {
+export async function runEnrichment({ cachePath = DEFAULT_CACHE_PATH, cliIds = null, timeoutMs = 8000, cliLadder = true } = {}) {
   const existing = readEnrichmentCache(cachePath);
   const mcp = await enrichMcp({ timeoutMs });
-  const cli = enrichCli(cliIds ?? discoveredCliIds());
+  // CLI enrichment ladder (Phase S1b): mise-registry identity -> package
+  // registry JSON -> tldr -> --help/subcommands -> pip show. Falls back to the
+  // legacy --help/pip-only sync path if the ladder is explicitly disabled.
+  const ids = cliIds ?? discoveredCliIds();
+  const cli = cliLadder ? await enrichCliLadder(ids, { timeoutMs }) : enrichCli(ids);
   const merged = { ...existing, ...mcp, ...cli };
   writeEnrichmentCache(merged, cachePath);
   return merged;

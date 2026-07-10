@@ -687,6 +687,7 @@ if (cliArgs.has("--help") || cliArgs.has("-h")) {
     ...(inventory.summary.connectors["mcp-only"] ? [`connectors mcp-only=${inventory.summary.connectors["mcp-only"]}`] : []),
     ...(inventory.summary.hooks.missing ? [`hooks missing=${inventory.summary.hooks.missing}`] : []),
     ...(inventory.summary.enrichments["bare-name"] ? [`enrich bare-name=${inventory.summary.enrichments["bare-name"]}`] : []),
+    ...(inventory.summary.surfaceAttention?.length ? [`surface gaps=${inventory.summary.surfaceAttention.join(",")}`] : []),
   ];
   console.log(
     [

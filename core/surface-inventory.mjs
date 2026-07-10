@@ -5,6 +5,7 @@ import { loadIndex } from "./registry.mjs";
 import { resolve } from "node:path";
 import { collectConnectorLinks } from "../scripts/link-connectors.mjs";
 import { collectHookLinks } from "../scripts/link-hooks.mjs";
+import { collectSurfaceMatrix } from "./surface-matrix.mjs";
 
 const SCOPES = ["project", "global"];
 
@@ -70,6 +71,10 @@ export async function collectSurfaceInventory({ cwd = process.cwd() } = {}) {
     connectors.push(...(await collectConnectorLinks({ command: "status", scope })).rows);
   }
 
+  // Full surface coverage matrix (Phase S0): heavy=true so mcp/skill read
+  // lanes report real discovery counts, not the light "declared" placeholder.
+  const matrix = await collectSurfaceMatrix({ cwd, heavy: true });
+
   hooks.sort((a, b) => statusRank(a.status) - statusRank(b.status) || a.hostId.localeCompare(b.hostId));
   connectors.sort(
     (a, b) =>
@@ -87,10 +92,12 @@ export async function collectSurfaceInventory({ cwd = process.cwd() } = {}) {
       hooks: summarize(hooks, (row) => row.status),
       connectors: summarize(connectors, (row) => row.instructionStatus),
       enrichments: summarize(enrichments, (row) => row.status),
+      surfaceAttention: matrix.summary.attention,
     },
     capabilities,
     enrichments,
     hooks,
     connectors,
+    surfaceMatrix: matrix,
   };
 }

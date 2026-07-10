@@ -155,17 +155,18 @@ export function collectSyncConfig({
     try {
       rows.push(runner ? runBackend(backend, action, options, runner) : runBackend(backend, action, options));
     } catch (error) {
+      const unsupported = /does not support/.test(error.message);
       rows.push({
         backend: normalizeBackendId(backend),
         label: normalizeBackendId(backend),
         action,
         command: [],
-        ok: false,
-        status: "error",
+        ok: unsupported,
+        status: unsupported ? "unsupported" : "error",
         summary: error.message,
         output: "",
         installHint: null,
-        next_actions: ["Use a supported backend/action combination."],
+        next_actions: unsupported ? ["Use status for probe-only backends."] : ["Use a supported backend/action combination."],
         artifacts: [],
       });
     }

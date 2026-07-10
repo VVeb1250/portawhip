@@ -53,6 +53,13 @@ const DEFAULTS = {
   // session before going silent (full line, then terse reminder, then
   // nothing). An assistant that reminds twice and then shuts up.
   pushMaxMentionsPerSession: 2,
+  // Auto-sync (Phase S1c, decision D): on session start, the hook
+  // fire-and-forgets scripts/auto-sync.mjs, which fans out already-canonical
+  // capabilities (recipe.yaml + recipes/imported.yaml + selected bundles) to
+  // all hosts. It does NOT auto-discover/import — import stays manual
+  // (`npm run import`). `enabled:false` disables the auto fan-out.
+  // throttleMinutes rate-limits it so rapid session restarts don't re-run it.
+  autoSync: { enabled: true, throttleMinutes: 60 },
 };
 
 export function loadConfig(path = "router.config.yaml") {
@@ -88,5 +95,15 @@ export function loadConfig(path = "router.config.yaml") {
       typeof raw.pushMaxMentionsPerSession === "number"
         ? raw.pushMaxMentionsPerSession
         : DEFAULTS.pushMaxMentionsPerSession,
+    autoSync: normalizeAutoSync(raw.autoSync),
+  };
+}
+
+function normalizeAutoSync(raw) {
+  if (!raw || typeof raw !== "object") return { ...DEFAULTS.autoSync };
+  return {
+    enabled: typeof raw.enabled === "boolean" ? raw.enabled : DEFAULTS.autoSync.enabled,
+    throttleMinutes:
+      typeof raw.throttleMinutes === "number" ? raw.throttleMinutes : DEFAULTS.autoSync.throttleMinutes,
   };
 }

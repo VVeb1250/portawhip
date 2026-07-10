@@ -75,6 +75,14 @@ export function resolveBundlePaths(root, selection) {
 // router.config.yaml's graphPath (see server/mcp-server.mjs's own comment).
 export function resolveRecipePaths(root, selection, { userRecipe = "recipe.yaml" } = {}) {
   const paths = resolveBundlePaths(root, selection);
+  // Imported surfaces (Phase S1): user-approved entries promoted from live
+  // host discovery by scripts/import-surfaces.mjs. Always-on (not an opt-in
+  // bundle), and ordered BEFORE the project's own recipe.yaml so a
+  // hand-authored entry still wins on id collision. Like bundle entries, an
+  // imported entry only routes if discovery independently confirms it's still
+  // installed (buildIndex's fromBundle gate) — so a stale import self-heals.
+  const importedPath = join(root, "recipes", "imported.yaml");
+  if (existsSync(importedPath)) paths.push(importedPath);
   const userPath = isAbsolute(userRecipe) ? userRecipe : join(root, userRecipe);
   if (existsSync(userPath)) paths.push(userPath);
   return paths;
