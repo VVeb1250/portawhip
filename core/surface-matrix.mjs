@@ -12,6 +12,7 @@ import { fileURLToPath } from "node:url";
 import yaml from "js-yaml";
 import spawnSync from "cross-spawn";
 import * as discover from "./discover.mjs";
+import { discoverEmbeddedHooks } from "./discover-hooks.mjs";
 import { collectHookLinks } from "../scripts/link-hooks.mjs";
 import { collectConnectorLinks } from "../scripts/link-connectors.mjs";
 
@@ -26,6 +27,7 @@ const DISCOVER_FNS = {
   skills: () => discover.discoverSkills(),
   commands: () => discover.discoverCommands(),
   agents: () => discover.discoverAgents(),
+  embeddedHooks: () => discoverEmbeddedHooks(),
 };
 
 export function loadSurfaceMatrix(path = DEFAULT_MATRIX_PATH) {

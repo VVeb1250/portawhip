@@ -76,13 +76,12 @@ surfaces:
   - id: hook-embedded
     label: Hooks (embedded in skills/plugins)
     read:
-      owner: null
-      gap: missing
-      note: "No scanner extracts hooks bundled inside skills/plugins/MCP packages yet (Phase S3)."
+      owner: "discover-hooks.mjs:discoverEmbeddedHooks"
+      probe: { kind: discover, fn: embeddedHooks, heavy: true }
     write:
       owner: null
       gap: missing
-      note: "Phase S3."
+      note: "Inventory only (Phase S3 mode B). Linking embedded hooks is deferred until a proven need (S3 full)."
 
   - id: instruction
     label: Instructions / router link
