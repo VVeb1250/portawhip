@@ -14,7 +14,19 @@ import { harvestHardNegatives } from "../registry/eval-harvest.mjs";
 import { runEnrichment } from "../registry/enrich.mjs";
 import { readActiveSelection, resolveRecipePaths } from "../state/bundle-state.mjs";
 import { dirname, resolve, join } from "node:path";
-import { appendFileSync } from "node:fs";
+import { appendFileSync, existsSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+
+const PACKAGE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
+
+function runtimeRoot(cwd = process.cwd()) {
+  return existsSync(join(cwd, "recipe.yaml")) ? cwd : PACKAGE_ROOT;
+}
+
+function runtimeFile(path, root = runtimeRoot()) {
+  if (existsSync(resolve(path))) return path;
+  return join(root, path);
+}
 
 function parseArgs(argv) {
   const args = {};
@@ -56,7 +68,8 @@ async function main() {
   // Otherwise resolve whatever bundles the user has opted into via
   // scripts/bundles.mjs select, defaulting to just this project's
   // recipe.yaml when nothing has been selected (today's exact behavior).
-  const recipePaths = args.recipe ?? resolveRecipePaths(process.cwd(), readActiveSelection(process.cwd()));
+  const root = runtimeRoot();
+  const recipePaths = args.recipe ?? resolveRecipePaths(root, readActiveSelection(root));
   const primaryRecipe = Array.isArray(recipePaths) ? recipePaths[recipePaths.length - 1] : recipePaths;
   const index = await loadIndex(recipePaths, { discover: !args["no-discover"] });
 
@@ -66,7 +79,7 @@ async function main() {
       process.exitCode = 1;
       return;
     }
-    const config = loadConfig(args.config ?? "router.config.yaml");
+    const config = loadConfig(args.config ?? runtimeFile("router.config.yaml", root));
     const opts = {
       threshold: args.threshold ? Number(args.threshold) : config.threshold,
       recipeThreshold: args.recipeThreshold ? Number(args.recipeThreshold) : config.recipeThreshold,
@@ -94,7 +107,7 @@ async function main() {
   }
 
   if (command === "eval") {
-    const config = loadConfig(args.config ?? "router.config.yaml");
+    const config = loadConfig(args.config ?? runtimeFile("router.config.yaml", root));
     const opts = {
       threshold: args.threshold ? Number(args.threshold) : config.threshold,
       recipeThreshold: args.recipeThreshold ? Number(args.recipeThreshold) : config.recipeThreshold,
@@ -113,7 +126,7 @@ async function main() {
     console.log(
       JSON.stringify(
         await runRouterEval(index, opts, {
-          evalPath: args.evalPath ?? "docs/router-eval-set.jsonl",
+          evalPath: args.evalPath ?? runtimeFile("docs/router-eval-set.jsonl", root),
           engine: args.engine ?? "hybrid",
           suggest: args.suggest ?? "any",
         }),
@@ -125,11 +138,11 @@ async function main() {
   }
 
   if (command === "compare") {
-    const config = loadConfig(args.config ?? "router.config.yaml");
+    const config = loadConfig(args.config ?? runtimeFile("router.config.yaml", root));
     console.log(
       JSON.stringify(
         await runRouterEvalComparison(index, config, {
-          evalPath: args.evalPath ?? "docs/router-eval-set.jsonl",
+          evalPath: args.evalPath ?? runtimeFile("docs/router-eval-set.jsonl", root),
           suggest: args.suggest ?? "any",
         }),
         null,
@@ -159,7 +172,7 @@ async function main() {
   }
 
   if (command === "harvest-negatives") {
-    const evalPath = args.evalPath ?? "docs/router-eval-set.jsonl";
+    const evalPath = args.evalPath ?? runtimeFile("docs/router-eval-set.jsonl", root);
     const minIgnoredCount = args.minIgnoredCount ? Number(args.minIgnoredCount) : 2;
     const feedbackRoot = dirname(resolve(primaryRecipe));
     const existing = loadEvalSet(evalPath);
