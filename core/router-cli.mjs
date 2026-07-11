@@ -80,6 +80,7 @@ async function main() {
       peakednessRatio: args.peakednessRatio ? Number(args.peakednessRatio) : config.peakednessRatio,
       denseEnabled: args["no-dense"] ? false : config.denseEnabled,
       denseThreshold: args.denseThreshold ? Number(args.denseThreshold) : config.denseThreshold,
+      pushMode: config.pushMode,
       denseBlock: args["dense-block"] ? true : false,
       factors: combineFactors(
         computeFactors(dirname(resolve(primaryRecipe))),
@@ -107,6 +108,7 @@ async function main() {
       peakednessRatio: args.peakednessRatio ? Number(args.peakednessRatio) : config.peakednessRatio,
       denseEnabled: args["no-dense"] ? false : config.denseEnabled,
       denseThreshold: args.denseThreshold ? Number(args.denseThreshold) : config.denseThreshold,
+      pushMode: config.pushMode,
     };
     console.log(
       JSON.stringify(

@@ -10,14 +10,16 @@ import {
   _forceUnavailableForTest,
   _setPipelinePendingForTest,
 } from "./dense-embedder.mjs";
-import { explainRoute } from "./route-entry.mjs";
+import { explainRoute, runRoute } from "./route-entry.mjs";
+import { triggerCoverageEvidence } from "./intent-evidence.mjs";
 import { loadConfig } from "./config.mjs";
 import { CONNECTOR_TARGETS, targetsForHost } from "./connector-targets.mjs";
 import { HOOK_TARGETS, hookTargetForHost } from "./hook-targets.mjs";
-import { blockForVariant } from "../adapters/instructions/generate.mjs";
+import { blockForVariant, upsertBlock } from "../adapters/instructions/generate.mjs";
+import { runRouterEval } from "./router-eval.mjs";
 import { installEntries } from "../scripts/load.mjs";
 import { discoverAgents, discoverCommands, discoverSkillsFromDirs } from "./discover.mjs";
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -26,6 +28,40 @@ import { join } from "node:path";
 // a 500MB+ model load on first use. Dense fusion itself gets its own test
 // with an injected fake pipeline (see "hybrid: dense-only" below).
 const CONFIG = { ...loadConfig(), denseEnabled: false };
+
+test("intent evidence: declared trigger coverage stays soft when a negative and positive share the same signature", () => {
+  const topicalNegative = triggerCoverageEvidence(
+    ["import tool"],
+    "how should a router avoid token bloat when many tools are installed",
+    { source: "declared" },
+  );
+  const genuinePositive = triggerCoverageEvidence(["sdk usage"], "use the sdk", { source: "declared" });
+
+  assert.equal(topicalNegative.coverage, 0.5);
+  assert.equal(genuinePositive.coverage, 0.5);
+  assert.equal(topicalNegative.strength, "partial");
+  assert.equal(genuinePositive.strength, "partial");
+  assert.equal(topicalNegative.source, "declared");
+  assert.equal(topicalNegative.method, "token_overlap");
+  assert.equal(topicalNegative.advisoryOnly, true);
+});
+
+test("config: push is silent by default and legacy rollback must be explicit", () => {
+  const root = tempRoot("harness-router-push-mode-");
+  try {
+    const missing = loadConfig(join(root, "missing.yaml"));
+    assert.equal(missing.pushMode, "silent");
+
+    const path = join(root, "router.config.yaml");
+    writeFileSync(path, "pushMode: legacy\n");
+    assert.equal(loadConfig(path).pushMode, "legacy");
+
+    writeFileSync(path, "pushMode: noisy-guess\n");
+    assert.equal(loadConfig(path).pushMode, "silent");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
 
 function tempRoot(prefix = "harness-router-") {
   return mkdtempSync(join(tmpdir(), prefix));
@@ -64,6 +100,10 @@ test("route: relevant prompt returns the matching entry, not others", async () =
 
 test("explainRoute: returns actionable results plus structured route metadata", async () => {
   const index = await buildIndex("recipe.yaml", { discover: false });
+  const engineResults = await routeHybrid(index, "how do I extract a table from this pdf", {
+    ...CONFIG,
+    includeWeak: true,
+  });
   const result = await explainRoute(index, "how do I extract a table from this pdf", CONFIG);
   assert.equal(result.status, "success");
   assert.equal(result.results[0].id, "pdf");
@@ -77,6 +117,86 @@ test("explainRoute: returns actionable results plus structured route metadata", 
   assert.equal(result.decision, "route");
   assert.deepEqual(result.near_misses, result.suppressed);
   assert.equal(result.reason, null);
+  for (const annotated of [...result.results, ...result.suppressed]) {
+    const expected = engineResults.find((item) => item.id === annotated.id);
+    const { intentEvidence, ...unchanged } = annotated;
+    assert.deepEqual(unchanged, expected, `delivery evidence changed engine output for ${annotated.id}`);
+  }
+  assert.equal(result.results[0].intentEvidence.source, "declared");
+  assert.equal(result.results[0].intentEvidence.advisoryOnly, true);
+});
+
+test("runRoute: advisory intent evidence preserves keyword-engine output", async () => {
+  const index = await buildIndex("recipe.yaml", { discover: false });
+  const prompt = "how do I extract a table from this pdf";
+  const expected = route(index, prompt, CONFIG);
+  const annotated = await runRoute(index, prompt, { ...CONFIG, engine: "keyword" });
+
+  assert.equal(annotated.length, expected.length);
+  for (let i = 0; i < annotated.length; i += 1) {
+    const { intentEvidence, ...unchanged } = annotated[i];
+    assert.deepEqual(unchanged, expected[i]);
+    assert.equal(intentEvidence.advisoryOnly, true);
+  }
+});
+
+test("runRoute: silent push abstains without changing the hybrid engine candidate", async () => {
+  const index = await buildIndex("recipe.yaml", { discover: false });
+  const prompt = "how do I extract a table from this pdf";
+  const engineCandidates = await routeHybrid(index, prompt, CONFIG);
+  assert.equal(engineCandidates[0]?.id, "pdf", "characterization: engine must still retrieve pdf");
+
+  const delivered = await runRoute(index, prompt, {
+    ...CONFIG,
+    engine: "hybrid",
+    mode: "push",
+    pushMode: "silent",
+  });
+  assert.deepEqual(delivered, []);
+});
+
+test("router eval: mode-aware cases exercise delivery policy instead of the engine directly", async () => {
+  const root = tempRoot("harness-router-mode-eval-");
+  try {
+    const evalPath = join(root, "eval.jsonl");
+    writeFileSync(
+      evalPath,
+      [
+        {
+          id: "raw-push-pdf",
+          prompt: "how do I extract a table from this pdf",
+          mode: "push",
+          shouldRoute: false,
+        },
+        {
+          id: "explicit-pdf",
+          prompt: "how do I extract a table from this pdf",
+          mode: "explicit",
+          shouldRoute: true,
+          expectedTopId: "pdf",
+          expectedAnyIds: ["pdf"],
+          expectedKind: "skill",
+        },
+        {
+          id: "optional-missing-tool",
+          prompt: "use a tool that is not installed in this fixture",
+          mode: "explicit",
+          shouldRoute: true,
+          expectedTopId: "not-installed-tool",
+          expectedAnyIds: ["not-installed-tool"],
+          expectedKind: "tool",
+          requiresInstalled: true,
+        },
+      ].map((row) => JSON.stringify(row)).join("\n") + "\n",
+    );
+    const index = await buildIndex("recipe.yaml", { discover: false });
+    const report = await runRouterEval(index, { ...CONFIG, pushMode: "silent" }, { evalPath });
+    assert.equal(report.status, "success");
+    assert.equal(report.metrics.falsePositiveCount, 0);
+    assert.equal(report.metrics.skippedCount, 1);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });
 
 test("explainRoute: empty result includes negative evidence", async () => {
@@ -671,7 +791,27 @@ test("connectors: every instruction target has a renderable harness block", () =
       const block = blockForVariant(target.variant);
       assert.match(block, /harness-router:start/);
       assert.match(block, /route\(task summary\)/);
+      assert.match(block, /requested action/i, `${hostId} route instruction must ask for a reasoned action summary`);
+      assert.match(block, /not (?:repeat|copy) the raw (?:prompt|topic)/i);
     }
+  }
+});
+
+test("connectors: relinking replaces an old route block and remains idempotent", () => {
+  const root = tempRoot("harness-router-instruction-upgrade-");
+  try {
+    const path = join(root, "AGENTS.md");
+    writeFileSync(
+      path,
+      "<!-- harness-router:start -->\nBefore starting, call route(task summary).\n<!-- harness-router:end -->\n",
+    );
+    assert.equal(upsertBlock(path, blockForVariant("generic")), true);
+    const upgraded = readFileSync(path, "utf8");
+    assert.match(upgraded, /positively requested action/i);
+    assert.equal((upgraded.match(/harness-router:start/g) ?? []).length, 1);
+    assert.equal(upsertBlock(path, blockForVariant("generic")), false);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
   }
 });
 

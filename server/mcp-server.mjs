@@ -23,6 +23,10 @@ import { buildCapabilityDocs } from "../core/capability-docs.mjs";
 // recipe.yaml/router.config.yaml must resolve to this repo, never the
 // caller's working directory.
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
+// Integration tests and embedded deployments may isolate outcome state from
+// the repository's live dogfood log. Capability/config discovery still uses
+// ROOT; only feedback events are redirected.
+const FEEDBACK_ROOT = process.env.PORTAWHIP_FEEDBACK_ROOT || ROOT;
 // Whatever bundles were opted into via `scripts/bundles.mjs select` (foundry
 // + roles), resolved in front of this repo's own recipe.yaml — defaults to
 // just recipe.yaml when nothing has been selected (today's behavior).
@@ -34,7 +38,9 @@ const server = new McpServer({ name: "harness-router", version: "0.0.1" });
 server.tool(
   "route",
   "Look up which installed capability (MCP tool, skill, or CLI) is relevant " +
-    "to a task, before starting it. Returns pointers, not full content. " +
+    "to a task, before starting it. State only the positively requested action and its direct object; " +
+    "omit background, merely mentioned, rejected, or negated candidate actions. Do not copy the raw prompt. " +
+    "Returns pointers, not full content. " +
     "Empty result is expected and means nothing relevant is installed.",
   { query: z.string(), k: z.number().optional() },
   async ({ query, k }) => {
@@ -47,7 +53,7 @@ server.tool(
     // installing it globally).
     const graphPath =
       config.graphPath && !isAbsolute(config.graphPath) ? join(ROOT, config.graphPath) : config.graphPath;
-    const factors = combineFactors(computeFactors(ROOT), stackFactors(index, process.cwd()));
+    const factors = combineFactors(computeFactors(FEEDBACK_ROOT), stackFactors(index, process.cwd()));
     // denseBlock:false - this is the interactive tier. A cold dense-model load
     // must never block a route() call (it would time the MCP client out; see
     // core/dense-embedder.mjs). Early calls are sparse-only and dense joins in
@@ -58,8 +64,9 @@ server.tool(
       k: k ?? config.k,
       factors,
       denseBlock: false,
+      mode: "pull",
     });
-    logEvent(ROOT, {
+    logEvent(FEEDBACK_ROOT, {
       type: "route",
       engine: config.engine,
       queryLength: query.length,
@@ -76,7 +83,9 @@ server.tool(
     // "ignored" outcome. Pull is recall-generous by design; punishing
     // unclicked results would recreate the noise-decay bug at this layer.
     for (const hit of result.results) {
-      logEvent(ROOT, { type: "suggested", id: hit.id, source: "pull", query });
+      // The reasoned summary may contain sensitive task context. Outcome
+      // attribution only needs capability id + source, so never persist it.
+      logEvent(FEEDBACK_ROOT, { type: "suggested", id: hit.id, source: "pull" });
     }
     return { content: [{ type: "text", text: JSON.stringify(result) }] };
   },

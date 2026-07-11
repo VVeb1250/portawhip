@@ -226,6 +226,13 @@ async function userPrompt(payload, args) {
   if (isSyntheticPrompt(prompt)) return;
 
   const config = loadConfig(CONFIG_PATH);
+  // Workstream A: a push hook sees only the raw prompt, not the agent's
+  // reasoned task summary. The characterization spikes proved no lexical or
+  // embedding threshold can reliably separate meta-discussion from a real
+  // capability request, so unsolicited push stays silent by default. The env
+  // override is a scoped rollback switch; it never changes retrieval itself.
+  const pushMode = process.env.PORTAWHIP_PUSH_MODE === "legacy" ? "legacy" : config.pushMode;
+  if (pushMode === "silent") return;
   const index = await loadIndex(RECIPE_PATHS);
   const graphPath =
     config.graphPath && !isAbsolute(config.graphPath) ? join(ROOT, config.graphPath) : config.graphPath;
@@ -235,7 +242,14 @@ async function userPrompt(payload, args) {
   // subprocess per prompt (see hook-stub.mjs), so it would pay that cold
   // load on every keystroke. Push mode stays sparse+peakedness-gate only;
   // dense is opt-in for callers that can amortize the load across calls.
-  const routed = await runRoute(index, prompt, { ...config, graphPath, factors, denseEnabled: false });
+  const routed = await runRoute(index, prompt, {
+    ...config,
+    graphPath,
+    factors,
+    denseEnabled: false,
+    mode: "push",
+    pushMode,
+  });
   if (!routed || routed.length === 0) return;
 
   // Push precision gate (2026-07-09): an unsolicited interruption needs a

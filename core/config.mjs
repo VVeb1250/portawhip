@@ -36,6 +36,11 @@ const DEFAULTS = {
   // plateau, not one lucky number. Picked 0.60 for extra margin over the
   // 0.58 edge.
   denseThreshold: 0.6,
+  // Raw-prompt push has no reasoning signal, so it cannot reliably
+  // distinguish topical discussion from an actionable capability request.
+  // Keep unsolicited routing silent by default. "legacy" is an explicit
+  // rollback mode for installations that still want the old push behavior.
+  pushMode: "silent",
   // See router.config.yaml's own comment for the 320 -> 640 rationale
   // (actionDirective()'s mcp/ToolSearch clause cost, paid at most once per
   // id per session since repeats render tersely) - kept in sync here so a
@@ -87,6 +92,7 @@ export function loadConfig(path = "router.config.yaml") {
     denseEnabled: typeof raw.denseEnabled === "boolean" ? raw.denseEnabled : DEFAULTS.denseEnabled,
     denseThreshold:
       typeof raw.denseThreshold === "number" ? raw.denseThreshold : DEFAULTS.denseThreshold,
+    pushMode: raw.pushMode === "legacy" || raw.pushMode === "silent" ? raw.pushMode : DEFAULTS.pushMode,
     pushBudgetChars:
       typeof raw.pushBudgetChars === "number" ? raw.pushBudgetChars : DEFAULTS.pushBudgetChars,
     pushMinConfidence:

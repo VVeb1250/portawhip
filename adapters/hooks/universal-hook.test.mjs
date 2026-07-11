@@ -34,21 +34,54 @@ function restoreFeedback() {
   }
 }
 
-function runHook(args, payload) {
+const LEGACY_PUSH_ENV = { PORTAWHIP_PUSH_MODE: "legacy" };
+
+function runHook(args, payload, { env = {} } = {}) {
   const result = spawnSync(process.execPath, [HOOK, ...args], {
     input: JSON.stringify(payload ?? {}),
     encoding: "utf8",
     cwd: ROOT,
+    env: { ...process.env, ...env },
   });
   return result.stdout.trim();
 }
 
-test("universal-hook: user_prompt emits additionalContext on a confident match", () => {
+test("universal-hook: user_prompt is silent by default even on a confident match", () => {
   clearFeedback();
   try {
     const stdout = runHook(
       ["--host", "claude-code", "--event", "user_prompt", "--nativeEvent", "UserPromptSubmit"],
       { prompt: "search codebase for the word foo" },
+    );
+    assert.equal(stdout, "");
+    assert.ok(!existsSync(FEEDBACK_PATH), "silent push must not log a suggested event");
+  } finally {
+    restoreFeedback();
+  }
+});
+
+test("universal-hook: raw meta-prompts stay silent and create no suggestion events", () => {
+  clearFeedback();
+  try {
+    const args = ["--host", "claude-code", "--event", "user_prompt", "--nativeEvent", "UserPromptSubmit"];
+    const prompts = [
+      "what are the tradeoffs of cross-host agent capability loading",
+      "how should a router avoid token bloat when many tools are installed",
+    ];
+    for (const prompt of prompts) assert.equal(runHook(args, { prompt }), "", prompt);
+    assert.ok(!existsSync(FEEDBACK_PATH), "silent meta-prompts must not log suggested events");
+  } finally {
+    restoreFeedback();
+  }
+});
+
+test("universal-hook: legacy push is an explicit opt-in for rollback", () => {
+  clearFeedback();
+  try {
+    const stdout = runHook(
+      ["--host", "claude-code", "--event", "user_prompt", "--nativeEvent", "UserPromptSubmit"],
+      { prompt: "search codebase for the word foo" },
+      { env: LEGACY_PUSH_ENV },
     );
     assert.ok(stdout, "expected non-empty stdout for a matching prompt");
     const parsed = JSON.parse(stdout);
@@ -65,11 +98,11 @@ test("universal-hook: user_prompt renders tersely once a capability was already 
     const args = ["--host", "claude-code", "--event", "user_prompt", "--nativeEvent", "UserPromptSubmit"];
     const payload = { prompt: "search codebase for the word foo", session_id: "test-session-repeat" };
 
-    const first = JSON.parse(runHook(args, payload));
+    const first = JSON.parse(runHook(args, payload, { env: LEGACY_PUSH_ENV }));
     assert.match(first.hookSpecificOutput.additionalContext, /ripgrep/);
     assert.match(first.hookSpecificOutput.additionalContext, /run it directly now/);
 
-    const second = JSON.parse(runHook(args, payload));
+    const second = JSON.parse(runHook(args, payload, { env: LEGACY_PUSH_ENV }));
     assert.match(second.hookSpecificOutput.additionalContext, /- ripgrep - still relevant, use it again/);
     assert.doesNotMatch(second.hookSpecificOutput.additionalContext, /run it directly now/);
   } finally {
@@ -93,9 +126,11 @@ test("universal-hook: user_prompt stays silent on a short/unrelated prompt", () 
 test("universal-hook: gemini-cli defaults hookEventName to BeforeAgent when no nativeEvent is passed", () => {
   clearFeedback();
   try {
-    const stdout = runHook(["--host", "gemini-cli", "--event", "user_prompt"], {
-      prompt: "search codebase for the word foo",
-    });
+    const stdout = runHook(
+      ["--host", "gemini-cli", "--event", "user_prompt"],
+      { prompt: "search codebase for the word foo" },
+      { env: LEGACY_PUSH_ENV },
+    );
     assert.ok(stdout);
     const parsed = JSON.parse(stdout);
     assert.equal(parsed.hookSpecificOutput.hookEventName, "BeforeAgent");
@@ -171,12 +206,12 @@ test("universal-hook: third mention of the same id in one session is silent (int
     const args = ["--host", "claude-code", "--event", "user_prompt", "--nativeEvent", "UserPromptSubmit"];
     const payload = { prompt: "search codebase for the word foo", session_id: "test-session-budget" };
 
-    const first = JSON.parse(runHook(args, payload));
+    const first = JSON.parse(runHook(args, payload, { env: LEGACY_PUSH_ENV }));
     assert.match(first.hookSpecificOutput.additionalContext, /run it directly now/);
-    const second = JSON.parse(runHook(args, payload));
+    const second = JSON.parse(runHook(args, payload, { env: LEGACY_PUSH_ENV }));
     assert.match(second.hookSpecificOutput.additionalContext, /still relevant/);
     // Budget (pushMaxMentionsPerSession=2) spent: full once, terse once, then silence.
-    const third = runHook(args, payload);
+    const third = runHook(args, payload, { env: LEGACY_PUSH_ENV });
     assert.equal(third, "");
   } finally {
     restoreFeedback();

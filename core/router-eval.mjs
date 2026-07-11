@@ -1,6 +1,5 @@
 import { readFileSync } from "node:fs";
-import { routeHybrid } from "./hybrid-router.mjs";
-import { route } from "./scorer.mjs";
+import { runRoute } from "./route-entry.mjs";
 
 export function loadEvalSet(path = "docs/router-eval-set.jsonl") {
   return readFileSync(path, "utf8")
@@ -31,12 +30,12 @@ function publicKindMetrics(metrics) {
 
 export async function runRouterEval(index, config, { evalPath, engine = "hybrid", suggest = "any" } = {}) {
   const cases = loadEvalSet(evalPath);
-  const routeFn =
-    engine === "keyword"
-      ? async (prompt, caseSuggest) => route(index, prompt, { ...config, suggest: caseSuggest })
-      : async (prompt, caseSuggest) => routeHybrid(index, prompt, { ...config, suggest: caseSuggest });
+  const routeFn = async (prompt, caseSuggest, mode) =>
+    runRoute(index, prompt, { ...config, engine, suggest: caseSuggest, mode });
 
   const failures = [];
+  const skipped = [];
+  const availableIds = new Set((index.entries ?? []).map((entry) => entry.id));
   let positiveCount = 0;
   let top1Correct = 0;
   let recall3Correct = 0;
@@ -47,8 +46,18 @@ export async function runRouterEval(index, config, { evalPath, engine = "hybrid"
   const byKind = { skill: emptyKindMetrics(), tool: emptyKindMetrics() };
 
   for (const testCase of cases) {
+    const expectedIds = testCase.expectedAnyIds ?? [testCase.expectedTopId].filter(Boolean);
+    if (
+      testCase.shouldRoute &&
+      testCase.requiresInstalled === true &&
+      !expectedIds.some((id) => availableIds.has(id))
+    ) {
+      skipped.push({ id: testCase.id, reason: "expected capability is not installed", expected: expectedIds });
+      continue;
+    }
     const testSuggest = testCase.suggest ?? suggest;
-    const results = await routeFn(testCase.prompt, testSuggest);
+    const routePrompt = testCase.routePrompt ?? testCase.prompt;
+    const results = await routeFn(routePrompt, testSuggest, testCase.mode ?? "explicit");
     const ids = results.map((result) => result.id);
     if (testCase.shouldRoute) {
       positiveCount += 1;
@@ -72,6 +81,7 @@ export async function runRouterEval(index, config, { evalPath, engine = "hybrid"
           id: testCase.id,
           expected: testCase.expectedTopId,
           suggest: testSuggest,
+          mode: testCase.mode ?? "explicit",
           got: ids,
           prompt: testCase.prompt,
         });
@@ -86,6 +96,7 @@ export async function runRouterEval(index, config, { evalPath, engine = "hybrid"
           id: testCase.id,
           expected: "[]",
           suggest: testSuggest,
+          mode: testCase.mode ?? "explicit",
           got: ids,
           prompt: testCase.prompt,
         });
@@ -101,6 +112,7 @@ export async function runRouterEval(index, config, { evalPath, engine = "hybrid"
     negativeCount,
     abstainAccuracy: negativeCount ? abstainCorrect / negativeCount : 0,
     falsePositiveCount,
+    skippedCount: skipped.length,
     byKind: {
       skill: publicKindMetrics(byKind.skill),
       tool: publicKindMetrics(byKind.tool),
@@ -118,6 +130,7 @@ export async function runRouterEval(index, config, { evalPath, engine = "hybrid"
     engine,
     metrics,
     failures,
+    skipped,
   };
 }
 

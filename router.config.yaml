@@ -84,6 +84,12 @@ denseEnabled: true
 # to rescue) - a real plateau, not one lucky number. Picked 0.60 for extra
 # margin over the 0.58 edge.
 denseThreshold: 0.6
+# WS-A mode differentiation: the push hook sees a raw prompt without the
+# agent's reasoned intent summary. Characterization proved lexical/dense
+# signals cannot reliably separate meta-discussion from an actionable request,
+# so unsolicited push is silent by default. Set PORTAWHIP_PUSH_MODE=legacy as
+# a temporary rollback switch; pull route() remains enabled and recall-generous.
+pushMode: silent
 # Phase 3 push-mode hook: hard char budget per injected suggestion block
 # (proxy for tokens — no tokenizer dependency for this). Lines are added
 # until the next one would exceed this, so it degrades to fewer/shorter

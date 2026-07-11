@@ -6,16 +6,42 @@
 
 import { route } from "./scorer.mjs";
 import { routeHybrid } from "./hybrid-router.mjs";
+import { annotateIntentEvidence } from "./intent-evidence.mjs";
+
+function pushIsSilent(config) {
+  return config.mode === "push" && config.pushMode === "silent";
+}
 
 export async function runRoute(index, prompt, config) {
-  return config.engine === "hybrid" ? await routeHybrid(index, prompt, config) : route(index, prompt, config);
+  // Delivery policy, not retrieval: raw-prompt push has no reasoning signal,
+  // so the default mode abstains before invoking either engine. Direct engine
+  // callers remain available for characterization and evals.
+  if (pushIsSilent(config)) return [];
+  const candidates =
+    config.engine === "hybrid" ? await routeHybrid(index, prompt, config) : route(index, prompt, config);
+  return annotateIntentEvidence(index, prompt, candidates, { mode: config.mode });
 }
 
 export async function explainRoute(index, prompt, config) {
   const startedAt = Date.now();
-  const all = config.engine === "hybrid"
+  if (pushIsSilent(config)) {
+    const reason = "push delivery is silent by mode policy";
+    return {
+      status: "empty",
+      decision: "abstain",
+      summary: "no actionable capability matched this task",
+      results: [],
+      suppressed: [],
+      near_misses: [],
+      negative_evidence: { result: "empty", reason },
+      reason,
+      latency_ms: Date.now() - startedAt,
+    };
+  }
+  const engineCandidates = config.engine === "hybrid"
     ? await routeHybrid(index, prompt, { ...config, includeWeak: true })
     : route(index, prompt, config);
+  const all = annotateIntentEvidence(index, prompt, engineCandidates, { mode: config.mode });
   const results = all.filter((item) => item.tier === "required" || item.tier === "recommended");
   const suppressed = all.filter((item) => item.tier !== "required" && item.tier !== "recommended");
   const reason =
