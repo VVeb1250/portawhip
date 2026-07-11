@@ -21,3 +21,6 @@ test("npm package declares a supported runtime and a release-safe file allowlist
   assert.ok(!packageJson.files?.some((entry) => entry.startsWith(".hp-state")));
 });
 
+test("test script uses Node's cross-platform recursive discovery", () => {
+  assert.equal(packageJson.scripts?.test, "node --test");
+});
