@@ -1,157 +1,162 @@
+<div align="center">
+
 # portawhip
 
-A thin, dynamic control plane for AI agent hosts (Claude Code, Codex, Gemini
-CLI, Cursor, ...): a **tools collector** that installs capabilities by
-delegating to existing, actively-maintained tools, and a **router** that
-surfaces the right capability at the right moment instead of loading
-everything into context up front.
+**One control plane for the tools, skills, MCP servers, and hooks used by your AI coding agents.**
 
-Two halves:
+[![npm version](https://img.shields.io/npm/v/portawhip?color=cb3837&logo=npm)](https://www.npmjs.com/package/portawhip)
+[![npm downloads](https://img.shields.io/npm/dm/portawhip?color=2f80ed)](https://www.npmjs.com/package/portawhip)
+[![CI](https://github.com/VVeb1250/portawhip/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/VVeb1250/portawhip/actions/workflows/ci.yml)
+[![Node.js 20+](https://img.shields.io/badge/Node.js-20%2B-339933?logo=nodedotjs&logoColor=white)](https://nodejs.org/)
+[![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-1. **Loader / cross-host sync** — declare a capability once in `recipe.yaml`,
-   it gets dispatched to whichever backend already solves that install problem
-   well (`add-mcp` for MCP servers, `mise` for CLI tools, `agent-skill-manager`
-   for skills). On top of that, a **sync connector** reads what's already
-   installed across every host, promotes it into a shared canonical set, and
-   fans it out to all the others — tools, skills, commands, agents, and
-   (inventory) embedded hooks. No install logic of its own, no hardcoded host
-   list.
-2. **Router** — a hybrid lexical + dense-semantic retrieval engine (the
-   semantic channel runs on a local embedding model that downloads and
-   caches itself on first use, no manual setup) over both curated
-   (`recipe.yaml`) and live auto-discovered capabilities, exposed 3 ways:
-   pull (`harness-router` MCP server), push (a native hook that suggests
-   capabilities inline as you type), and CLI. Usage feedback (was a
-   suggestion actually used?) adjusts future ranking.
+Stop loading every capability into every prompt. Portawhip discovers what is installed, keeps agent hosts aligned, and surfaces only the capability that fits the task.
 
-## Why
+</div>
 
-Most "skill router" setups either dump every tool's full description into
-context (expensive) or hardcode brittle routing rules that misfire on
-unrelated prompts (noisy). This project's answer: silence is a valid
-output. If nothing clears the confidence bar, say nothing — never guess.
+## Try it
 
-See [`VISION.md`](VISION.md) for the full design rationale and the
-predecessor project's failure modes this is deliberately avoiding.
-
-## Install
+Launch the interactive control surface without installing anything globally:
 
 ```bash
-npm install
-node scripts/load.mjs              # dispatch recipe.yaml to add-mcp/mise/asm
-node scripts/doctor.mjs            # live-probed health check across all layers
+npx portawhip
 ```
 
-Link the router into your agent hosts:
+Or route a task directly:
 
 ```bash
-node scripts/link-connectors.mjs install --scope global   # instruction blocks (CLAUDE.md/AGENTS.md/...)
-node scripts/link-hooks.mjs install --scope global        # native push-mode hooks, where supported
+npx --package portawhip portawhip-router route --prompt "inspect this PDF and extract its tables"
 ```
 
-Both support `status` (dry read, no writes) and `remove`, and both back up
-nothing themselves for `--scope global` writes — back up your host config
-files yourself before running against global scope for the first time.
+Portawhip returns a short, actionable pointer—or nothing. Abstaining on weak matches is a feature, so unrelated prompts stay clean.
 
-## Usage
+## What it solves
+
+AI agent setups drift quickly: one host knows about an MCP server, another has the useful skill, and every tool description competes for context. Portawhip gives that sprawl one lightweight control plane:
+
+- **Discover** capabilities already installed across Claude Code, Codex, Gemini CLI, Cursor, VS Code/Copilot, OpenCode, Zed, Windsurf, Cline, Pi, and Amp.
+- **Route** with a hybrid lexical + local semantic engine instead of dumping the full catalog into context.
+- **Sync** tools, skills, commands, agents, MCP configuration, and supported hooks across hosts.
+- **Stay safe** with read-only status/preview defaults and explicit confirmation for writes in the TUI.
+- **Learn quietly** from whether suggestions were used, without sending prompts to a hosted model.
+
+## Three ways to use it
+
+### 1. Interactive TUI
 
 ```bash
-node core/router-cli.mjs route --prompt "convert this pdf to text"
-node core/router-cli.mjs list --type skill
-npm run route:eval        # regression eval against docs/router-eval-set.jsonl
-npm run sync-config       # status for delegated config-sync backends
-npm run sync-config:preview -- --backend ai-config-sync
-npm run sync-config:preview -- --profile ai-project-instructions
-npm test                  # unit/integration tests
+npx portawhip
 ```
 
-Or let a connected agent host call the `harness-router` MCP server's
-`route(query)` / `list_all(type?)` tools directly.
+The six tabs cover overview, config sync, connectors, hooks, enrichment, and the capability catalog. Press `h` or `?` for the key map. Repair/remove actions require a second keypress.
 
-## Config Sync
-
-`scripts/sync-config.mjs` is a thin facade over existing sync backends. It
-does not reconcile host files itself:
-
-- `ai-config-sync-manager` for Claude Code ↔ Codex drift, preview, and apply.
-- `agent-skill-manager` as the current skill-provider probe backend.
-- `@agents-dev/cli` (`.agents`) as an optional source-of-truth sync probe for
-  broader host coverage.
-
-Default commands are read-only or dry-run. Writes require
-`node scripts/sync-config.mjs apply --apply` plus a narrow `--include` or
-`--profile`; broad all-area apply and all-skills apply are blocked.
-
-Runtime package execution is pinned by default. `ai-config-sync-manager` is
-installed as an exact dev dependency, so `npm run sync-config` uses
-`node_modules/.bin/ai-config-sync` instead of downloading a package at command
-time. The fallback to `npx --yes` is disabled unless the caller explicitly
-passes `--allow-npx` or sets `PORTAWHIP_ALLOW_NPX=1`.
-
-The TUI is available with:
+### 2. Router CLI
 
 ```bash
-npm run tui
-node scripts/tui.mjs --summary
-node scripts/tui.mjs --help
+npx --package portawhip portawhip-router list --type skill
+npx --package portawhip portawhip-router route --prompt "run an accessibility-focused browser test"
 ```
 
-`router-cli route` is interactive-fast by default: dense retrieval joins only
-when already warm. Use `--dense-block` for explicit offline/eval-style waits.
+Dense retrieval uses a local multilingual embedding model and warms in the background. Add `--dense-block` when deterministic full semantic retrieval matters more than startup latency.
 
-Built-in profiles:
+### 3. MCP connector
 
-- `ai-project-instructions` — project-scope Claude/Codex instructions only.
-- `ai-global-instructions` — global Claude/Codex instructions only.
-- `ai-project-mcp` — project-scope MCP only.
-- `asm-status` — agent-skill-manager provider probe.
-- `agents-check` — `.agents` source-of-truth status/check.
+Add this stdio server to any MCP-compatible host:
 
-## Cross-host capability sync
+```json
+{
+  "mcpServers": {
+    "harness-router": {
+      "command": "npx",
+      "args": ["--yes", "--package", "portawhip", "harness-router"]
+    }
+  }
+}
+```
 
-Bring a capability that's installed in one host into the shared set, and let
-every other host pick it up.
+The server exposes:
+
+- `route(query)` — find the best installed capability for a concrete action.
+- `list_all(type?)` — inspect the catalog, optionally filtered by capability type.
+
+## Install a managed workspace
+
+For connector/hook linking and repeatable team configuration, install the repository locally:
 
 ```bash
-npm run import                 # grouped: what's installed but not yet canonical
-npm run import:preview         # same, as a plan
-node scripts/import-surfaces.mjs apply --apply --type cli,mcp   # promote (auto-enriched)
-npm run sync-surfaces sync     # fan canonical out to all detected hosts
-npm run hooks:embedded         # inventory hooks bundled inside skills/plugins
+git clone https://github.com/VVeb1250/portawhip.git
+cd portawhip
+npm ci
+npm run doctor
 ```
 
-- **Import is manual, fan-out is automatic.** You choose what becomes
-  canonical; a session-start hook then keeps every host in sync in the
-  background (`autoSync` in `router.config.yaml`, throttled). Import never
-  runs on its own.
-- **CLI entries are auto-enriched** on import (mise registry → package
-  registry → tldr → `--help`), so a bare `rg` routes on "search / grep /
-  regex", not just its own name — no LLM involved.
-- **Embedded hooks are inventoried, not linked.** Activating a third-party
-  hook is a trust boundary; portawhip shows you what's there and stops.
-- The `portawhip` management skill wraps this whole workflow — a connected
-  agent can drive it when you ask to import/sync tools.
+Then inspect before writing:
 
-## Host support
+```bash
+npm run connectors
+npm run hooks
+npm run sync-config:preview
+```
 
-portawhip syncs across Claude Code, Codex, Gemini CLI, Cursor, VS Code /
-Copilot, OpenCode, Zed, Windsurf, Cline, plus Pi and Amp — each to the extent
-its config surface allows. See **[`docs/host-support.md`](docs/host-support.md)**
-for the full per-surface matrix and the concrete reason behind every gap
-(e.g. Gemini commands are TOML not markdown; several hosts have no lifecycle
-hook API). Detection is delegated to `add-mcp` plus a presence-checked
-supplementary detector — a host is only ever targeted when it's actually
-installed.
+Link supported hosts only when the preview looks right:
 
-## Status
+```bash
+npm run connectors:link -- --scope global
+npm run hooks:link -- --scope global
+```
 
-All 4 planned phases (loader → registry/scorer → pull-mode → push-mode →
-feedback loop) are built and locally verified. Read
-[`HANDOFF.md`](HANDOFF.md) for the current, living state — known gaps,
-bugs found and fixed, and what's honestly still unverified (e.g. this was
-built and tested on Windows only; POSIX-safety was reviewed statically,
-not live-verified on macOS/Linux).
+Global connector and hook changes are a trust boundary. Back up host configuration first; Portawhip does not silently activate third-party embedded hooks.
+
+## How it works
+
+```text
+installed tools + skills + MCP servers + agent surfaces
+                         │
+                         ▼
+              live capability registry
+                         │
+              lexical + local semantic rank
+                         │
+                confidence / intent gates
+                         │
+          ┌──────────────┼──────────────┐
+          ▼              ▼              ▼
+       MCP pull       CLI / TUI      optional hooks
+```
+
+The loader delegates installation to maintained tools (`add-mcp`, `mise`, and `agent-skill-manager`) instead of rebuilding package management. The router combines curated entries from `recipe.yaml` with live discovery, then applies confidence, intent, and per-lane peakedness gates. See [VISION.md](VISION.md) for the design rationale.
+
+## Useful commands
+
+| Goal | Command |
+| --- | --- |
+| Health check | `npm run doctor` |
+| Interactive TUI | `npm run tui` |
+| Connector status | `npm run connectors` |
+| Hook status | `npm run hooks` |
+| Config-sync preview | `npm run sync-config:preview` |
+| Import preview | `npm run import:preview` |
+| Route evaluation | `npm run route:eval` |
+| Full tests | `npm test` |
+
+## Supported surfaces
+
+Support is capability-specific: some hosts expose MCP configuration but no native lifecycle hooks. Portawhip reports those lanes as `mcp-only` or `unsupported` instead of pretending they are linked. The evidence-backed matrix lives in [docs/host-support.md](docs/host-support.md).
+
+## Privacy and safety
+
+- Routing runs locally; the dense model is downloaded and cached on first use.
+- Status and preview commands are read-only by default.
+- Broad config writes and all-skills writes are blocked.
+- Runtime package fallback through unpinned `npx --yes` is opt-in.
+- Host-native permission controls still govern actual tool execution.
+
+Please report security issues through the private process in [SECURITY.md](SECURITY.md), not a public issue.
+
+## Contributing
+
+Bug reports, host adapters, routing eval cases, and documentation improvements are welcome. Start with [CONTRIBUTING.md](CONTRIBUTING.md) and the open [issues](https://github.com/VVeb1250/portawhip/issues).
 
 ## License
 
-MIT — see [`LICENSE`](LICENSE).
+MIT © portawhip contributors. See [LICENSE](LICENSE).

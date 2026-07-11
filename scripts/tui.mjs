@@ -229,28 +229,37 @@ function Overview({ inventory }) {
     { flexDirection: "column" },
     React.createElement(Text, { color: "gray" }, `generated ${inventory.generatedAt}`),
     React.createElement(Text, { color: "gray" }, inventory.cwd),
-    React.createElement(Box, { height: 1 }),
-    React.createElement(Text, { bold: true }, "Start here"),
-    React.createElement(Text, null, "1. Press 2, then f to pick a safe sync profile and p to preview it."),
-    React.createElement(Text, null, "2. Press 3 or 4, choose a scope with g, then l twice to repair connectors or hooks."),
-    React.createElement(Text, null, "3. Press 5, then e if tool descriptions need enrichment."),
-    React.createElement(Text, { color: "gray" }, "Need the key map? Press h or ? any time."),
-    React.createElement(Box, { height: 1 }),
-    rows.map(([label, count, summary]) =>
+    React.createElement(
+      Box,
+      { borderStyle: "round", borderColor: "cyan", paddingX: 1, flexDirection: "column", marginTop: 1, marginBottom: 1 },
       React.createElement(
-        Box,
-        { key: label },
-        React.createElement(Text, { bold: true }, `${label.padEnd(14)} `),
-        React.createElement(Text, null, `${String(count).padStart(4)}  `),
+        Text,
+        null,
+        React.createElement(Text, { color: "cyan", bold: true }, "Workspace pulse"),
+        React.createElement(Text, { color: "gray" }, "  live inventory"),
+      ),
+      rows.map(([label, count, summary]) =>
         React.createElement(
-          Text,
-          { color: "gray" },
-          Object.entries(summary)
-            .map(([key, value]) => `${key}:${value}`)
-            .join("  "),
+          Box,
+          { key: label },
+          React.createElement(Text, { color: count > 0 ? "green" : "gray" }, count > 0 ? "● " : "○ "),
+          React.createElement(Text, { bold: true }, `${label.padEnd(14)} `),
+          React.createElement(Text, { color: "cyan", bold: true }, `${String(count).padStart(4)}  `),
+          React.createElement(
+            Text,
+            { color: "gray" },
+            Object.entries(summary)
+              .map(([key, value]) => `${key}:${value}`)
+              .join("  "),
+          ),
         ),
       ),
     ),
+    React.createElement(Text, { color: "cyan", bold: true }, "Start here"),
+    React.createElement(Text, null, "1  Press 2, then f to choose a safe sync profile and p to preview."),
+    React.createElement(Text, null, "2  Press 3 or 4, choose a scope with g, then l twice to repair links."),
+    React.createElement(Text, null, "3  Press 5, then e when tool descriptions need enrichment."),
+    React.createElement(Text, { color: "gray" }, "Press h or ? for the key map. Destructive actions always ask twice."),
   );
 }
 

@@ -5,9 +5,30 @@ on:
     branches: [master, main]
   pull_request:
 
+permissions:
+  contents: read
+
 jobs:
   test:
-    runs-on: windows-latest
+    name: Node ${{ matrix.node }} / ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        node: [20, 22]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - run: npm ci
+      - run: npm test
+
+  release-gates:
+    name: Release gates
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -15,7 +36,8 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - run: npm test
       - run: npm run route:eval
-      - run: node scripts/sync-config.mjs status --backend agent-skill-manager
-      - run: node scripts/tui.mjs --summary
+      - run: npm run sync-config -- --backend agent-skill-manager
+      - run: npm run tui -- --summary
+      - run: npm audit --audit-level=high
+      - run: npm pack --dry-run
