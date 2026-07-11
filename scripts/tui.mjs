@@ -7,6 +7,7 @@ import { CONFIG_SYNC_BACKENDS } from "../core/surface/config-sync-backends.mjs";
 import { DEFAULT_CACHE_PATH, runEnrichment } from "../core/registry/enrich.mjs";
 import { collectSurfaceInventory } from "../core/surface/surface-inventory.mjs";
 import { collectSyncConfig } from "./sync/sync-config.mjs";
+import { LINK_SCOPES, linkActionNeedsConfirmation, linkCommandForInput, runLinkAction } from "./tui-actions.mjs";
 
 const TABS = ["overview", "sync", "connectors", "hooks", "enrich", "capabilities"];
 const TAB_COPY = {
@@ -23,12 +24,12 @@ const TAB_COPY = {
   connectors: {
     title: "MCP + instruction links",
     description: "Check whether each host has the harness-router MCP server and instructions linked.",
-    action: "Run npm run connectors:link outside the TUI if rows say missing.",
+    action: "Choose scope with g, press l twice to repair links, or x twice to remove them.",
   },
   hooks: {
     title: "Native hooks",
     description: "Check prompt/tool hooks that let the router suggest capabilities at the right moment.",
-    action: "Run npm run hooks:link outside the TUI if supported hosts say missing.",
+    action: "Choose scope with g, press l twice to repair hooks, or x twice to remove them.",
   },
   enrich: {
     title: "Tool descriptions",
@@ -129,9 +130,11 @@ Keys:
   up/down select rows, h or ? help, r refresh, q quit
   sync tab: f profile, b backend, g scope, d direction, i include
   sync actions: s status, p preview, a apply (press twice to confirm)
+  connectors/hooks tabs: g scope, s status, l install or repair (press twice), x remove (press twice)
 
 Safety:
   sync apply requires one backend plus an include selector or safe profile.
+  connector and hook changes require a second key press to confirm.
   sync-config does not run unpinned npx backends unless --allow-npx is used on the CLI.`);
 }
 
@@ -178,7 +181,7 @@ function useTerminalSize() {
   return size;
 }
 
-function Header({ tab, loading, enriching, syncing }) {
+function Header({ tab, loading, enriching, syncing, linking }) {
   const copy = TAB_COPY[tab];
   return React.createElement(
     Box,
@@ -191,6 +194,7 @@ function Header({ tab, loading, enriching, syncing }) {
       loading ? React.createElement(Text, { color: "yellow" }, " refresh") : null,
       enriching ? React.createElement(Text, { color: "yellow" }, " enrich") : null,
       syncing ? React.createElement(Text, { color: "yellow" }, " sync") : null,
+      linking ? React.createElement(Text, { color: "yellow" }, " link") : null,
     ),
     React.createElement(
       Box,
@@ -228,7 +232,7 @@ function Overview({ inventory }) {
     React.createElement(Box, { height: 1 }),
     React.createElement(Text, { bold: true }, "Start here"),
     React.createElement(Text, null, "1. Press 2, then f to pick a safe sync profile and p to preview it."),
-    React.createElement(Text, null, "2. Press 3 or 4 to see what is missing for connectors and hooks."),
+    React.createElement(Text, null, "2. Press 3 or 4, choose a scope with g, then l twice to repair connectors or hooks."),
     React.createElement(Text, null, "3. Press 5, then e if tool descriptions need enrichment."),
     React.createElement(Text, { color: "gray" }, "Need the key map? Press h or ? any time."),
     React.createElement(Box, { height: 1 }),
@@ -448,6 +452,24 @@ function SyncControls({ action, selection, armedApply }) {
   );
 }
 
+function LinkControls({ tab, scope, action, armedAction }) {
+  const title = TAB_COPY[tab].title;
+  const confirmHint = armedAction ? `confirm ${action}: press ${action === "install" ? "l" : "x"} again` : "l repair  x remove";
+  return React.createElement(
+    Box,
+    { flexDirection: "column", marginBottom: 1 },
+    React.createElement(
+      Text,
+      null,
+      React.createElement(Text, { color: "gray" }, "scope "),
+      React.createElement(Text, { color: "cyan", bold: true }, scope),
+      React.createElement(Text, { color: "gray" }, "  action "),
+      React.createElement(Text, null, action),
+    ),
+    React.createElement(Text, { color: "gray" }, `g scope  s status  ${confirmHint}  (${title})`),
+  );
+}
+
 function EmptyState({ tab }) {
   const copy = TAB_COPY[tab];
   return React.createElement(
@@ -464,6 +486,7 @@ function HelpPanel({ tab, width }) {
     "1-6 jump tabs  tab/right next tab  left previous tab",
     "up/down select rows  r refresh  h or ? toggle help  q quit",
     "sync tab: f profile  b backend  g scope  d direction  i include  s status  p preview  a apply",
+    "connectors/hooks tabs: g scope  s status  l repair (press twice)  x remove (press twice)",
     "enrich tab: e refresh cached tool descriptions",
   ];
   return React.createElement(
@@ -501,6 +524,7 @@ function App() {
   const { loading, error, inventory, refresh } = useInventory();
   const [enriching, setEnriching] = useState(false);
   const [syncing, setSyncing] = useState(false);
+  const [linking, setLinking] = useState(false);
   const [message, setMessage] = useState("");
   const [tabIndex, setTabIndex] = useState(0);
   const [selected, setSelected] = useState(0);
@@ -512,8 +536,13 @@ function App() {
   const [includeIndex, setIncludeIndex] = useState(0);
   const [profileIndex, setProfileIndex] = useState(0);
   const [armedApply, setArmedApply] = useState(false);
+  const [linkScopeIndex, setLinkScopeIndex] = useState(0);
+  const [linkAction, setLinkAction] = useState("status");
+  const [linkResult, setLinkResult] = useState(null);
+  const [armedLinkAction, setArmedLinkAction] = useState(null);
   const [showHelp, setShowHelp] = useState(false);
   const tab = TABS[tabIndex];
+  const linkScope = LINK_SCOPES[linkScopeIndex];
   const syncSelectionState = useMemo(
     () => syncSelection({ backendIndex, scopeIndex, directionIndex, includeIndex, profileIndex }),
     [backendIndex, scopeIndex, directionIndex, includeIndex, profileIndex],
@@ -521,12 +550,12 @@ function App() {
   const rows = useMemo(() => {
     if (!inventory) return [];
     if (tab === "sync") return syncRowsFromState(syncResult, syncSelectionState, syncAction);
-    if (tab === "connectors") return inventory.connectors;
-    if (tab === "hooks") return inventory.hooks;
+    if (tab === "connectors") return linkResult?.tab === "connectors" ? linkResult.rows : inventory.connectors;
+    if (tab === "hooks") return linkResult?.tab === "hooks" ? linkResult.rows : inventory.hooks;
     if (tab === "enrich") return inventory.enrichments;
     if (tab === "capabilities") return inventory.capabilities;
     return [];
-  }, [inventory, tab, syncResult, syncSelectionState, syncAction]);
+  }, [inventory, tab, syncResult, syncSelectionState, syncAction, linkResult]);
 
   useEffect(() => {
     setSelected((index) => Math.min(index, Math.max(rows.length - 1, 0)));
@@ -542,6 +571,7 @@ function App() {
         setTabIndex(numericTab - 1);
         setSelected(0);
         setArmedApply(false);
+        setArmedLinkAction(null);
         return;
       }
       if (input === "h" || input === "?") {
@@ -550,6 +580,8 @@ function App() {
       }
       if (input === "r") {
         setMessage("");
+        setLinkResult(null);
+        setArmedLinkAction(null);
         refresh();
       }
       if (tab === "sync" && !syncing) {
@@ -628,15 +660,45 @@ function App() {
           .catch((err) => setMessage(err.message))
           .finally(() => setEnriching(false));
       }
+      if ((tab === "connectors" || tab === "hooks") && !linking) {
+        const requestedAction = linkCommandForInput(tab, input);
+        if (input === "g") {
+          setLinkScopeIndex((index) => (index + 1) % LINK_SCOPES.length);
+          setLinkResult(null);
+          setArmedLinkAction(null);
+        }
+        if (requestedAction) {
+          if (linkActionNeedsConfirmation(requestedAction) && armedLinkAction !== requestedAction) {
+            setLinkAction(requestedAction);
+            setArmedLinkAction(requestedAction);
+            setMessage(`${requestedAction} is armed; press ${input} again to run`);
+            return;
+          }
+          setLinking(true);
+          setArmedLinkAction(null);
+          setLinkAction(requestedAction);
+          setMessage("");
+          runLinkAction({ tab, command: requestedAction, scope: linkScope })
+            .then((result) => {
+              setLinkResult({ ...result, tab });
+              setMessage(result.summary);
+              return refresh();
+            })
+            .catch((err) => setMessage(err.message))
+            .finally(() => setLinking(false));
+        }
+      }
       if (key.tab || key.rightArrow) {
         setTabIndex((index) => (index + 1) % TABS.length);
         setSelected(0);
         setArmedApply(false);
+        setArmedLinkAction(null);
       }
       if (key.leftArrow) {
         setTabIndex((index) => (index - 1 + TABS.length) % TABS.length);
         setSelected(0);
         setArmedApply(false);
+        setArmedLinkAction(null);
       }
       if (key.upArrow) setSelected((index) => Math.max(0, index - 1));
       if (key.downArrow) setSelected((index) => Math.min(Math.max(rows.length - 1, 0), index + 1));
@@ -650,10 +712,13 @@ function App() {
   return React.createElement(
     Box,
     { flexDirection: "column", paddingX: 1, width: columns, height: terminalRows },
-    React.createElement(Header, { tab, loading, enriching, syncing }),
+    React.createElement(Header, { tab, loading, enriching, syncing, linking }),
     showHelp ? React.createElement(HelpPanel, { tab, width: columns }) : null,
     tab === "overview" ? React.createElement(Overview, { inventory }) : null,
     tab === "sync" ? React.createElement(SyncControls, { action: syncAction, selection: syncSelectionState, armedApply }) : null,
+    tab === "connectors" || tab === "hooks"
+      ? React.createElement(LinkControls, { tab, scope: linkScope, action: linkAction, armedAction: armedLinkAction })
+      : null,
     tab !== "overview" && rows.length === 0 ? React.createElement(EmptyState, { tab }) : null,
     tab === "sync" && rows.length > 0
       ? React.createElement(SyncRows, { rows, selected, height: Math.max(MIN_LIST_HEIGHT, layout.listHeight - 2), width: columns })
