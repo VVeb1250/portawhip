@@ -1,10 +1,10 @@
 # Tunable router defaults. This is data the scorer reads at runtime —
 # not decision logic. Missing file / missing keys fall back to the same
-# defaults shown here (core/config.mjs), so this file is optional.
+# defaults shown here (core/state/config.mjs), so this file is optional.
 #
 # Two thresholds, not one — curated (recipe.yaml) triggers are deliberately
 # authored, so a single hit is trustworthy (recipeThreshold=1). Auto-
-# discovered triggers (core/discover.mjs) are inferred from free-text
+# discovered triggers (core/registry/discover.mjs) are inferred from free-text
 # descriptions across 300+ installed skills and produce real single-word
 # noise (e.g. "write" fired on "write a poem about the ocean" against
 # writing-related skills) — verified requiring 2 distinct hits removes that
@@ -12,11 +12,11 @@
 engine: hybrid
 threshold: 2
 recipeThreshold: 1
-# Hybrid retrieval uses minisearch (core/sparse-retriever.mjs) — score scale
+# Hybrid retrieval uses minisearch (core/router/sparse-retriever.mjs) — score scale
 # is in the hundreds/thousands, not the small BM25-ish numbers the old
 # hand-rolled engine produced. Two thresholds here too, for the same reason
 # as recipeThreshold above: curated entries (recipe.yaml) need a much lower
-# bar than auto-discovered ones. Verified empirically (docs/phase2.5-verify.md):
+# bar than auto-discovered ones. Verified empirically (docs/archive/phase2.5-verify.md):
 # generic domain vocabulary shared across hundreds of skill docs ("architecture",
 # "patterns") can outscore a genuine curated match (ripgrep/context7), so one
 # global threshold can't separate "real auto match" from "noise" AND "real
@@ -55,7 +55,7 @@ k: 5
 # (planned: PLAN.md Phase 4's local embedding model), not a sharper number.
 peakednessRatio: 1.05
 # Phase 4 semantic layer (PLAN.md): dense retrieval via BAAI/bge-m3
-# (core/dense-embedder.mjs) - a second, meaning-based channel additive to the
+# (core/router/dense-embedder.mjs) - a second, meaning-based channel additive to the
 # lexical one above, on by default so every user gets it with zero manual
 # setup (no install script, no model management - transformers.js downloads
 # and caches the model itself on first use, MIT-licensed, ~543MB quantized,
@@ -99,7 +99,7 @@ pushMode: silent
 # syntax per kind, so suggestions actually get acted on) made a first-time
 # mcp line ~265 chars on its own (the ToolSearch-fallback clause is the
 # biggest chunk) - 320 only fit one such line even when lane-reserved
-# results (core/hybrid-router.mjs) legitimately surface 2-3 relevant
+# results (core/router/hybrid-router.mjs) legitimately surface 2-3 relevant
 # capabilities across skill/agent/tool lanes at once. Repeat mentions
 # within the same session already render tersely (universal-hook.mjs's
 # sessionSuggestedIds), so this cost is paid at most once per id per

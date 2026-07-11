@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { discoverCommands, discoverAgents, defaultCommandRoots, defaultAgentRoots } from "./discover.mjs";
+import { discoverCommands, discoverAgents, defaultCommandRoots, defaultAgentRoots } from "../registry/discover.mjs";
 import { homedir } from "node:os";
 
 function fixtureRoot() {

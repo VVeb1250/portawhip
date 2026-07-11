@@ -22,12 +22,12 @@ let ok = true;
 
 for (const scope of scopes) {
   console.log(`\n== removing native hooks (${scope}) ==`);
-  ok = run("scripts/link-hooks.mjs", ["remove", "--scope", scope]) && ok;
+  ok = run("scripts/link/link-hooks.mjs", ["remove", "--scope", scope]) && ok;
 }
 
 for (const scope of scopes) {
   console.log(`\n== removing instruction connectors (${scope}) ==`);
-  ok = run("scripts/link-connectors.mjs", ["remove", "--scope", scope]) && ok;
+  ok = run("scripts/link/link-connectors.mjs", ["remove", "--scope", scope]) && ok;
 }
 
 console.log("\n== verifying via doctor ==");

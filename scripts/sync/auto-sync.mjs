@@ -22,7 +22,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync, rmSync, appendFileS
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import spawnSync from "cross-spawn";
-import { loadConfig } from "../core/config.mjs";
+import { loadConfig } from "../../core/state/config.mjs";
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const STATE_DIR = join(ROOT, ".hp-state");

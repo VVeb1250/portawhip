@@ -9,9 +9,9 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync, rmSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { listInstalledServers } from "add-mcp";
-import { detectHosts } from "./hosts.mjs";
-import { blockForVariant, removeBlock, upsertBlock } from "../adapters/instructions/generate.mjs";
-import { CONNECTOR_TARGETS, targetsForHost } from "../core/connector-targets.mjs";
+import { detectHosts } from "../hosts.mjs";
+import { blockForVariant, removeBlock, upsertBlock } from "../../adapters/instructions/generate.mjs";
+import { CONNECTOR_TARGETS, targetsForHost } from "../../core/surface/connector-targets.mjs";
 
 const VALID_COMMANDS = new Set(["status", "install", "remove"]);
 const VALID_SCOPES = new Set(["project", "global"]);

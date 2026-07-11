@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { buildBackendArgs, runBackend } from "../core/config-sync-backends.mjs";
+import { buildBackendArgs, runBackend } from "../../core/surface/config-sync-backends.mjs";
 import { collectSyncConfig, parseArgs } from "./sync-config.mjs";
 
 test("sync-config: ai-config-sync preview builds a dry-run plan command", () => {

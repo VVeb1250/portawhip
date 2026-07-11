@@ -1,18 +1,18 @@
 #!/usr/bin/env node
-// node core/router-cli.mjs route --prompt "..." [--threshold N] [--recipeThreshold N] [--k N]
-// node core/router-cli.mjs list [--type skill]
+// node core/router/router-cli.mjs route --prompt "..." [--threshold N] [--recipeThreshold N] [--k N]
+// node core/router/router-cli.mjs list [--type skill]
 
-import { loadIndex } from "./registry.mjs";
+import { loadIndex } from "../registry/registry.mjs";
 import { listAll } from "./scorer.mjs";
 import { runRoute } from "./route-entry.mjs";
-import { compileCapabilityGraph, writeCapabilityGraph } from "./capability-graph-compiler.mjs";
+import { compileCapabilityGraph, writeCapabilityGraph } from "../registry/capability-graph-compiler.mjs";
 import { runRouterEval, runRouterEvalComparison, loadEvalSet } from "./router-eval.mjs";
-import { loadConfig } from "./config.mjs";
-import { computeFactors } from "./feedback.mjs";
-import { stackFactors, combineFactors } from "./stack-detect.mjs";
-import { harvestHardNegatives } from "./eval-harvest.mjs";
-import { runEnrichment } from "./enrich.mjs";
-import { readActiveSelection, resolveRecipePaths } from "./bundle-state.mjs";
+import { loadConfig } from "../state/config.mjs";
+import { computeFactors } from "../state/feedback.mjs";
+import { stackFactors, combineFactors } from "../state/stack-detect.mjs";
+import { harvestHardNegatives } from "../registry/eval-harvest.mjs";
+import { runEnrichment } from "../registry/enrich.mjs";
+import { readActiveSelection, resolveRecipePaths } from "../state/bundle-state.mjs";
 import { dirname, resolve, join } from "node:path";
 import { appendFileSync } from "node:fs";
 
@@ -31,13 +31,13 @@ function parseArgs(argv) {
 
 function printUsage() {
   console.log(`usage:
-  node core/router-cli.mjs route --prompt "..." [--engine hybrid|keyword] [--no-dense|--dense-block]
-  node core/router-cli.mjs eval [--engine hybrid|keyword]
-  node core/router-cli.mjs compare
-  node core/router-cli.mjs enrich
-  node core/router-cli.mjs harvest-negatives
-  node core/router-cli.mjs graph-compile [--out path]
-  node core/router-cli.mjs list [--type mcp|cli|skill]
+  node core/router/router-cli.mjs route --prompt "..." [--engine hybrid|keyword] [--no-dense|--dense-block]
+  node core/router/router-cli.mjs eval [--engine hybrid|keyword]
+  node core/router/router-cli.mjs compare
+  node core/router/router-cli.mjs enrich
+  node core/router/router-cli.mjs harvest-negatives
+  node core/router/router-cli.mjs graph-compile [--out path]
+  node core/router/router-cli.mjs list [--type mcp|cli|skill]
 
 Notes:
   route is interactive-fast by default: dense retrieval joins only if already warm.

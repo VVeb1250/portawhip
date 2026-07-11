@@ -12,8 +12,8 @@
 #   command        : run argv; covered if the backend command resolves + exits 0
 #   discover       : call core/discover.mjs <fn>; covered if it returns items
 #                    (count reported; 0 = lane works but nothing found)
-#   link-hooks     : scripts/link-hooks.mjs status; covered if any host linked
-#   link-connectors: scripts/link-connectors.mjs status; covered if any linked
+#   link-hooks     : scripts/link/link-hooks.mjs status; covered if any host linked
+#   link-connectors: scripts/link/link-connectors.mjs status; covered if any linked
 #   none           : no probe; status is the declared `gap`
 #
 # gap values: missing (no lane, planned) | unsupported (no host API) | partial
@@ -53,7 +53,7 @@ surfaces:
       probe: { kind: discover, fn: commands }
     write:
       owner: "link-surfaces.mjs (managed-copy)"
-      probe: { kind: command, argv: [node, scripts/link-surfaces.mjs, status] }
+      probe: { kind: command, argv: [node, scripts/link/link-surfaces.mjs, status] }
 
   - id: agent
     label: Subagent defs
@@ -62,13 +62,13 @@ surfaces:
       probe: { kind: discover, fn: agents }
     write:
       owner: "link-surfaces.mjs (managed-copy; gemini unsupported)"
-      probe: { kind: command, argv: [node, scripts/link-surfaces.mjs, status] }
+      probe: { kind: command, argv: [node, scripts/link/link-surfaces.mjs, status] }
 
   - id: hook-declared
     label: Hooks (declared)
     read:
       owner: "hooks.manifest.yaml (curated)"
-      probe: { kind: command, argv: [node, scripts/link-hooks.mjs, status] }
+      probe: { kind: command, argv: [node, scripts/link/link-hooks.mjs, status] }
     write:
       owner: "link-hooks.mjs (native-hook hosts)"
       probe: { kind: link-hooks }
@@ -87,7 +87,7 @@ surfaces:
     label: Instructions / router link
     read:
       owner: "ai-config-sync (claude<->codex)"
-      probe: { kind: command, argv: [node, scripts/link-connectors.mjs, status] }
+      probe: { kind: command, argv: [node, scripts/link/link-connectors.mjs, status] }
     write:
       owner: "ai-config-sync + link-connectors.mjs"
       probe: { kind: link-connectors }

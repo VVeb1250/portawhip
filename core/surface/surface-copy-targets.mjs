@@ -35,8 +35,3 @@ export const SURFACE_COPY_TARGETS = {
     agent: [{ scope: "global", format: "none", unsupported: true }],
   },
 };
-
-export function copyTargetsFor(hostId, type, scope) {
-  const perType = SURFACE_COPY_TARGETS[hostId]?.[type] ?? [];
-  return perType.filter((t) => t.scope === scope);
-}

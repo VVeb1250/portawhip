@@ -8,15 +8,15 @@ import { dirname, join, isAbsolute } from "node:path";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
-import { loadIndex } from "../core/registry.mjs";
-import { listAll } from "../core/scorer.mjs";
-import { explainRoute } from "../core/route-entry.mjs";
-import { loadConfig } from "../core/config.mjs";
-import { computeFactors, logEvent } from "../core/feedback.mjs";
-import { stackFactors, combineFactors } from "../core/stack-detect.mjs";
-import { readActiveSelection, resolveRecipePaths } from "../core/bundle-state.mjs";
-import { warmDense, setDenseCachePath, primeDocCache } from "../core/dense-embedder.mjs";
-import { buildCapabilityDocs } from "../core/capability-docs.mjs";
+import { loadIndex } from "../core/registry/registry.mjs";
+import { listAll } from "../core/router/scorer.mjs";
+import { explainRoute } from "../core/router/route-entry.mjs";
+import { loadConfig } from "../core/state/config.mjs";
+import { computeFactors, logEvent } from "../core/state/feedback.mjs";
+import { stackFactors, combineFactors } from "../core/state/stack-detect.mjs";
+import { readActiveSelection, resolveRecipePaths } from "../core/state/bundle-state.mjs";
+import { warmDense, setDenseCachePath, primeDocCache } from "../core/router/dense-embedder.mjs";
+import { buildCapabilityDocs } from "../core/registry/capability-docs.mjs";
 
 // This server is registered globally (add-mcp may promote project scope to
 // global depending on the host), so a caller can invoke it from ANY cwd —

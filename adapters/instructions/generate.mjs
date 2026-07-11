@@ -53,8 +53,6 @@ trigger: always_on
 
 ${GENERIC_BLOCK}`;
 
-export const BLOCK = GENERIC_BLOCK;
-
 export function blockForVariant(variant = "generic") {
   if (variant === "claude-code") return CLAUDE_CODE_BLOCK;
   if (variant === "cursor-rule") return CURSOR_RULE_BLOCK;

@@ -9,7 +9,7 @@
 
 import { detectGlobalAgents } from "add-mcp";
 import spawnSync from "cross-spawn";
-import { detectExtraHosts } from "../core/extra-hosts.mjs";
+import { detectExtraHosts } from "../core/surface/extra-hosts.mjs";
 
 // add-mcp and asm are independent projects that each picked their own id
 // strings for the same real-world tool. This table is unavoidable glue

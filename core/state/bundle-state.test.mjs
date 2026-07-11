@@ -9,7 +9,7 @@ import {
   resolveRecipePaths,
   writeActiveSelection,
 } from "./bundle-state.mjs";
-import { buildIndex, isDiscovered, mergeRawEntries } from "./registry.mjs";
+import { buildIndex, isDiscovered, mergeRawEntries } from "../registry/registry.mjs";
 
 function tmpProject() {
   return mkdtempSync(join(tmpdir(), "harness-bundle-"));

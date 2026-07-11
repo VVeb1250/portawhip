@@ -5,7 +5,7 @@
 // inventing another config reconciler here. It gives portawhip one stable
 // command surface for status/preview/apply while preserving backend ownership.
 
-import { CONFIG_SYNC_BACKENDS, backendById, normalizeBackendId, runBackend } from "../core/config-sync-backends.mjs";
+import { CONFIG_SYNC_BACKENDS, backendById, normalizeBackendId, runBackend } from "../../core/surface/config-sync-backends.mjs";
 
 const VALID_ACTIONS = new Set(["status", "preview", "apply"]);
 const VALID_SCOPES = new Set(["all", "project", "global"]);

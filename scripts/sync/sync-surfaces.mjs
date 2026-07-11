@@ -3,11 +3,11 @@
 import { existsSync, readdirSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
 import spawnSync from "cross-spawn";
-import { activeSelectionPathFor, readActiveSelection, resolveRecipePaths } from "../core/bundle-state.mjs";
-import { mergeRawEntries } from "../core/registry.mjs";
-import { detectHosts } from "./hosts.mjs";
-import { installEntries } from "./load.mjs";
-import { collectSurfaceLinks, presentHostSet } from "./link-surfaces.mjs";
+import { activeSelectionPathFor, readActiveSelection, resolveRecipePaths } from "../../core/state/bundle-state.mjs";
+import { mergeRawEntries } from "../../core/registry/registry.mjs";
+import { detectHosts } from "../hosts.mjs";
+import { installEntries } from "../load.mjs";
+import { collectSurfaceLinks, presentHostSet } from "../link/link-surfaces.mjs";
 
 const VALID_COMMANDS = new Set(["sync", "check", "watch"]);
 const INSTALL_TYPES = new Set(["cli", "skill"]);

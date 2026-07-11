@@ -14,8 +14,8 @@ import {
   resolveBundlePaths,
   resolveRecipePaths,
   writeActiveSelection,
-} from "../core/bundle-state.mjs";
-import { mergeRawEntries } from "../core/registry.mjs";
+} from "../core/state/bundle-state.mjs";
+import { mergeRawEntries } from "../core/registry/registry.mjs";
 import { detectHosts } from "./hosts.mjs";
 import { installEntries } from "./load.mjs";
 

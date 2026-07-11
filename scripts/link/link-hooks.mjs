@@ -4,8 +4,8 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { homedir } from "node:os";
-import { detectHosts } from "./hosts.mjs";
-import { HOOK_TARGETS, LOGICAL_HOOKS, LOGICAL_EVENT_TO_MANIFEST, hookTargetForHost } from "../core/hook-targets.mjs";
+import { detectHosts } from "../hosts.mjs";
+import { HOOK_TARGETS, LOGICAL_HOOKS, LOGICAL_EVENT_TO_MANIFEST, hookTargetForHost } from "../../core/surface/hook-targets.mjs";
 
 const VALID_COMMANDS = new Set(["status", "install", "remove"]);
 const VALID_SCOPES = new Set(["project", "global"]);

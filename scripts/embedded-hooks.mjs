@@ -3,7 +3,7 @@
 // bundled inside installed skills/plugins so a human can see what runs on
 // lifecycle events. Does NOT link or execute anything.
 
-import { discoverEmbeddedHooks, summarizeEmbeddedHooks } from "../core/discover-hooks.mjs";
+import { discoverEmbeddedHooks, summarizeEmbeddedHooks } from "../core/surface/discover-hooks.mjs";
 
 function main() {
   const json = process.argv.includes("--json");

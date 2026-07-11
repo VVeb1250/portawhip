@@ -112,10 +112,6 @@ export function buildBackendArgs(backendId, action, options = {}) {
   throw new Error(`unhandled backend ${backend.id}`);
 }
 
-export function commandForBackend(backendId) {
-  return resolveBackendInvocation(backendById(backendId), []).command;
-}
-
 export function runBackend(backendId, action, options = {}, runner = spawnSync.sync) {
   const backend = backendById(backendId);
   const args = buildBackendArgs(backend.id, action, options);

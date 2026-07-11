@@ -1,9 +1,9 @@
 import { test, before } from "node:test";
 import assert from "node:assert/strict";
-import { buildIndex } from "./registry.mjs";
-import { loadConfig } from "./config.mjs";
+import { buildIndex } from "../registry/registry.mjs";
+import { loadConfig } from "../state/config.mjs";
 import { routeHybrid } from "./hybrid-router.mjs";
-import { stackFactors } from "./stack-detect.mjs";
+import { stackFactors } from "../state/stack-detect.mjs";
 
 // Live routing tests - the real router, on real prompts, against this
 // machine's REAL installed capabilities (recipe.yaml + live discovery). The

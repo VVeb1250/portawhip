@@ -16,7 +16,7 @@ import { fileURLToPath } from "node:url";
 import { readEnrichmentCache } from "./enrich.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const ROOT = resolve(HERE, "..");
+const ROOT = resolve(HERE, "..", "..");
 const DISCOVERY_MAX_BUFFER = 16 * 1024 * 1024;
 const SKILL_SCAN_MAX_DEPTH = 9;
 const SKIP_DIRS = new Set([".git", "node_modules"]);

@@ -1,10 +1,10 @@
-import { readActiveSelection, resolveRecipePaths } from "./bundle-state.mjs";
-import { capabilityKind } from "./capability-kind.mjs";
-import { DEFAULT_CACHE_PATH, readEnrichmentCache } from "./enrich.mjs";
-import { loadIndex } from "./registry.mjs";
+import { readActiveSelection, resolveRecipePaths } from "../state/bundle-state.mjs";
+import { capabilityKind } from "../registry/capability-kind.mjs";
+import { DEFAULT_CACHE_PATH, readEnrichmentCache } from "../registry/enrich.mjs";
+import { loadIndex } from "../registry/registry.mjs";
 import { resolve } from "node:path";
-import { collectConnectorLinks } from "../scripts/link-connectors.mjs";
-import { collectHookLinks } from "../scripts/link-hooks.mjs";
+import { collectConnectorLinks } from "../../scripts/link/link-connectors.mjs";
+import { collectHookLinks } from "../../scripts/link/link-hooks.mjs";
 import { collectSurfaceMatrix } from "./surface-matrix.mjs";
 
 const SCOPES = ["project", "global"];

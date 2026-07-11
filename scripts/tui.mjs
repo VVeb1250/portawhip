@@ -3,10 +3,10 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Box, Text, render, useApp, useInput, useStdin, useStdout } from "ink";
 import ansiEscapes from "ansi-escapes";
-import { CONFIG_SYNC_BACKENDS } from "../core/config-sync-backends.mjs";
-import { DEFAULT_CACHE_PATH, runEnrichment } from "../core/enrich.mjs";
-import { collectSurfaceInventory } from "../core/surface-inventory.mjs";
-import { collectSyncConfig } from "./sync-config.mjs";
+import { CONFIG_SYNC_BACKENDS } from "../core/surface/config-sync-backends.mjs";
+import { DEFAULT_CACHE_PATH, runEnrichment } from "../core/registry/enrich.mjs";
+import { collectSurfaceInventory } from "../core/surface/surface-inventory.mjs";
+import { collectSyncConfig } from "./sync/sync-config.mjs";
 
 const TABS = ["overview", "sync", "connectors", "hooks", "enrich", "capabilities"];
 const TAB_COPY = {

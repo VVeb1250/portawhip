@@ -2,7 +2,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { buildCapabilityDocs } from "./capability-docs.mjs";
 import { capabilityKind } from "./capability-kind.mjs";
-import { tokenize } from "./tokenize.mjs";
+import { tokenize } from "../router/tokenize.mjs";
 
 const GRAPH_STOPWORDS = new Set([
   "agent",

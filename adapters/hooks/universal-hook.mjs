@@ -12,14 +12,14 @@ import { existsSync } from "node:fs";
 import spawn from "cross-spawn";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { dirname, join, isAbsolute } from "node:path";
-import { loadIndex, readCachedIndex } from "../../core/registry.mjs";
-import { runRoute } from "../../core/route-entry.mjs";
-import { pointerFor } from "../../core/capability-docs.mjs";
-import { loadConfig } from "../../core/config.mjs";
-import { computeFactors, logEvent, readEvents } from "../../core/feedback.mjs";
-import { stackFactors, combineFactors } from "../../core/stack-detect.mjs";
-import { readActiveSelection, resolveRecipePaths } from "../../core/bundle-state.mjs";
-import { isSyntheticPrompt } from "../../core/prompt-hygiene.mjs";
+import { loadIndex, readCachedIndex } from "../../core/registry/registry.mjs";
+import { runRoute } from "../../core/router/route-entry.mjs";
+import { pointerFor } from "../../core/registry/capability-docs.mjs";
+import { loadConfig } from "../../core/state/config.mjs";
+import { computeFactors, logEvent, readEvents } from "../../core/state/feedback.mjs";
+import { stackFactors, combineFactors } from "../../core/state/stack-detect.mjs";
+import { readActiveSelection, resolveRecipePaths } from "../../core/state/bundle-state.mjs";
+import { isSyntheticPrompt } from "../../core/router/prompt-hygiene.mjs";
 
 const ROOT = dirname(dirname(dirname(fileURLToPath(import.meta.url))));
 // Whatever bundles were opted into via `scripts/bundles.mjs select` (foundry
@@ -319,7 +319,7 @@ async function postTool(payload, args) {
 // never blocked or delayed.
 function sessionStart() {
   try {
-    const child = spawn.spawn(process.execPath, [join(ROOT, "scripts", "auto-sync.mjs")], {
+    const child = spawn.spawn(process.execPath, [join(ROOT, "scripts", "sync", "auto-sync.mjs")], {
       cwd: ROOT,
       detached: true,
       stdio: "ignore",

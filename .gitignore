@@ -1,7 +1,9 @@
 node_modules/
 .hp-state/
 .codegraph/
+_verify_out.txt
 .agents/local.json
+.agents/local.json.*.tmp
 .agents/generated/
 .agents/mcp_config.json
 CLAUDE.md

@@ -4,8 +4,8 @@
 // Threshold/k defaults come from router.config.yaml (core/config.mjs), not
 // a constant here — this module takes them as explicit call arguments.
 
-import { capabilityKind, matchesSuggestKind } from "./capability-kind.mjs";
-import { pointerFor } from "./capability-docs.mjs";
+import { capabilityKind, matchesSuggestKind } from "../registry/capability-kind.mjs";
+import { pointerFor } from "../registry/capability-docs.mjs";
 
 function escapeRegex(s) {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");

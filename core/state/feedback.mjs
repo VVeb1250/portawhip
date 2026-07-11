@@ -13,7 +13,7 @@
 
 import { appendFileSync, readFileSync, writeFileSync, existsSync, mkdirSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { isSyntheticPrompt } from "./prompt-hygiene.mjs";
+import { isSyntheticPrompt } from "../router/prompt-hygiene.mjs";
 
 // Unbounded append-only growth was a real gap (found during a project
 // review, not a live incident): this log has no rotation, so heavy daily

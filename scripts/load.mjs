@@ -8,8 +8,8 @@ import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import spawnSync from "cross-spawn";
 import { detectHosts } from "./hosts.mjs";
-import { mergeRawEntries } from "../core/registry.mjs";
-import { readActiveSelection, resolveRecipePaths } from "../core/bundle-state.mjs";
+import { mergeRawEntries } from "../core/registry/registry.mjs";
+import { readActiveSelection, resolveRecipePaths } from "../core/state/bundle-state.mjs";
 
 function run(cmd, args) {
   console.log(`\n$ ${cmd} ${args.join(" ")}`);

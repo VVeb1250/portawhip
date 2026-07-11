@@ -4,7 +4,7 @@
 // own list/audit command and reports pass/fail.
 
 import spawnSync from "cross-spawn";
-import { collectSurfaceMatrix } from "../core/surface-matrix.mjs";
+import { collectSurfaceMatrix } from "../core/surface/surface-matrix.mjs";
 
 function parseArgs(argv) {
   return { json: argv.includes("--json"), heavy: argv.includes("--heavy") };
@@ -41,7 +41,7 @@ function checkSkill() {
 // this file went stale until this pass. Same pattern: shell out to each
 // piece's own authoritative command, don't re-implement its logic here.
 function checkRouter() {
-  const r = capture(process.execPath, ["core/router-cli.mjs", "list"]);
+  const r = capture(process.execPath, ["core/router/router-cli.mjs", "list"]);
   let entries = [];
   try {
     entries = JSON.parse(r.output);
@@ -56,12 +56,12 @@ function checkRouter() {
 // print (path + linked/missing per host). Doctor's job is to surface that,
 // not re-summarize it into a single OK/FAIL.
 function checkHooks(scope) {
-  const r = capture(process.execPath, ["scripts/link-hooks.mjs", "status", "--scope", scope]);
+  const r = capture(process.execPath, ["scripts/link/link-hooks.mjs", "status", "--scope", scope]);
   return { label: `native hooks (link-hooks.mjs, ${scope} scope)`, ok: r.ok, detail: r.output.trim() };
 }
 
 function checkConnectors(scope) {
-  const r = capture(process.execPath, ["scripts/link-connectors.mjs", "status", "--scope", scope]);
+  const r = capture(process.execPath, ["scripts/link/link-connectors.mjs", "status", "--scope", scope]);
   return { label: `instruction connectors (link-connectors.mjs, ${scope} scope)`, ok: r.ok, detail: r.output.trim() };
 }
 

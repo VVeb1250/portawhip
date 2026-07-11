@@ -1,9 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { buildIndex } from "./registry.mjs";
-import { compileCapabilityGraph } from "./capability-graph-compiler.mjs";
+import { buildIndex } from "../registry/registry.mjs";
+import { compileCapabilityGraph } from "../registry/capability-graph-compiler.mjs";
 import { route, listAll, scoreEntry } from "./scorer.mjs";
-import { buildCapabilityDocs } from "./capability-docs.mjs";
+import { buildCapabilityDocs } from "../registry/capability-docs.mjs";
 import { routeHybrid } from "./hybrid-router.mjs";
 import {
   _setPipelineForTest,
@@ -12,13 +12,13 @@ import {
 } from "./dense-embedder.mjs";
 import { explainRoute, runRoute } from "./route-entry.mjs";
 import { triggerCoverageEvidence } from "./intent-evidence.mjs";
-import { loadConfig } from "./config.mjs";
-import { CONNECTOR_TARGETS, targetsForHost } from "./connector-targets.mjs";
-import { HOOK_TARGETS, hookTargetForHost } from "./hook-targets.mjs";
-import { blockForVariant, upsertBlock } from "../adapters/instructions/generate.mjs";
+import { loadConfig } from "../state/config.mjs";
+import { CONNECTOR_TARGETS, targetsForHost } from "../surface/connector-targets.mjs";
+import { HOOK_TARGETS, hookTargetForHost } from "../surface/hook-targets.mjs";
+import { blockForVariant, upsertBlock } from "../../adapters/instructions/generate.mjs";
 import { runRouterEval } from "./router-eval.mjs";
-import { installEntries } from "../scripts/load.mjs";
-import { discoverAgents, discoverCommands, discoverSkillsFromDirs } from "./discover.mjs";
+import { installEntries } from "../../scripts/load.mjs";
+import { discoverAgents, discoverCommands, discoverSkillsFromDirs } from "../registry/discover.mjs";
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";

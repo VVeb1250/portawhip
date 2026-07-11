@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { shouldRun, lockIsStale, runAutoSync } from "./auto-sync.mjs";
-import { loadConfig } from "../core/config.mjs";
+import { loadConfig } from "../../core/state/config.mjs";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -29,7 +29,7 @@ test("runAutoSync: disabled config skips without touching fan-out", async () => 
 });
 
 // The enabled path acquires a real lock + writes real state under ROOT/
-// .hp-state, so it is verified live (docs/phaseS1c-verify.md) rather than in
+// .hp-state, so it is verified live (docs/archive/phaseS1c-verify.md) rather than in
 // a unit test that would pollute/contend on that shared state.
 
 test("loadConfig: autoSync defaults on with a 60m throttle; overrides read", () => {

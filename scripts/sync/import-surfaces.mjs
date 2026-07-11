@@ -14,10 +14,10 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import yaml from "js-yaml";
-import { readActiveSelection, resolveRecipePaths } from "../core/bundle-state.mjs";
-import { readRawEntries } from "../core/registry.mjs";
-import { discoverAll } from "../core/discover.mjs";
-import { enrichCliLadder } from "../core/cli-enrich.mjs";
+import { readActiveSelection, resolveRecipePaths } from "../../core/state/bundle-state.mjs";
+import { readRawEntries } from "../../core/registry/registry.mjs";
+import { discoverAll } from "../../core/registry/discover.mjs";
+import { enrichCliLadder } from "../../core/registry/cli-enrich.mjs";
 
 const VALID_ACTIONS = new Set(["status", "preview", "apply"]);
 const IMPORTED_RECIPE = ["cli", "skill", "command", "agent"]; // land in imported.yaml

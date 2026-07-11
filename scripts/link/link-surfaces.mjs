@@ -13,10 +13,10 @@
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync, rmSync, readdirSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
-import { readActiveSelection, resolveRecipePaths } from "../core/bundle-state.mjs";
-import { readRawEntries } from "../core/registry.mjs";
-import { SURFACE_COPY_TARGETS } from "../core/surface-copy-targets.mjs";
-import { detectHosts } from "./hosts.mjs";
+import { readActiveSelection, resolveRecipePaths } from "../../core/state/bundle-state.mjs";
+import { readRawEntries } from "../../core/registry/registry.mjs";
+import { SURFACE_COPY_TARGETS } from "../../core/surface/surface-copy-targets.mjs";
+import { detectHosts } from "../hosts.mjs";
 
 // Present hosts = whatever add-mcp detects plus the extra hosts we detect
 // ourselves, as a Set for the copy-target presence gate.

@@ -8,7 +8,7 @@
 // grow from what real sessions actually got wrong, not only from what a
 // human thought to write down.
 
-import { readEvents } from "./feedback.mjs";
+import { readEvents } from "../state/feedback.mjs";
 
 const MAX_PROMPT_CHARS = 200;
 
