@@ -74,7 +74,7 @@
     "bundles": "node scripts/bundles.mjs list",
     "bundles:status": "node scripts/bundles.mjs status",
     "bundles:select": "node scripts/bundles.mjs select",
-    "test": "node --test \"core/**/*.test.mjs\" \"scripts/**/*.test.mjs\" \"adapters/**/*.test.mjs\" \"server/**/*.test.mjs\"",
+    "test": "node --test",
     "route": "node core/router/router-cli.mjs route",
     "route:list": "node core/router/router-cli.mjs list",
     "route:eval": "node core/router/router-cli.mjs eval --engine hybrid",
