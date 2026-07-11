@@ -13,10 +13,14 @@ const END = "<!-- harness-router:end -->";
 // (Codex/AGENTS.md verified 8/8 route() calls with this text alone).
 export const GENERIC_BLOCK = `${START}
 Before starting a task, call \`route(task summary)\` on the harness-router MCP
-server and follow any returned pointers. State only the positively requested action
-and its direct object; omit background, merely mentioned, rejected, or negated
-candidate actions. Do not copy the raw prompt. An empty
-result is normal and means nothing relevant is installed — proceed without it.
+server and follow any returned pointers. Pass only the positively requested action
+and its direct object; do not copy the raw prompt. Drop chit-chat, venting,
+background, and any rejected, negated, or hypothetical option. If a request is
+buried in chat, route only the request; if the message names several distinct
+actions, call route once per action.
+Example: "ugh CI is flaky again, anyway find where we parse the auth token" ->
+route("find the code that parses the auth token").
+An empty result is normal and means nothing relevant is installed — proceed without it.
 ${END}`;
 
 // Claude Code defers MCP tool schemas behind ToolSearch until looked up by
@@ -25,10 +29,14 @@ ${END}`;
 // the generic wording never told the model to look them up first.
 export const CLAUDE_CODE_BLOCK = `${START}
 Before starting a task, call \`route(task summary)\` on the harness-router MCP
-server and follow any returned pointers. State only the positively requested action
-and its direct object; omit background, merely mentioned, rejected, or negated
-candidate actions. Do not copy the raw prompt. If
-\`route\`/\`list_all\` show up as deferred/pending tools rather than directly
+server and follow any returned pointers. Pass only the positively requested action
+and its direct object; do not copy the raw prompt. Drop chit-chat, venting,
+background, and any rejected, negated, or hypothetical option. If a request is
+buried in chat, route only the request; if the message names several distinct
+actions, call route once per action.
+Example: "ugh CI is flaky again, anyway find where we parse the auth token" ->
+route("find the code that parses the auth token").
+If \`route\`/\`list_all\` show up as deferred/pending tools rather than directly
 callable, first call ToolSearch with query
 "select:mcp__harness-router__route,mcp__harness-router__list_all" to load them,
 then call route(). An empty result from route() is normal and means nothing

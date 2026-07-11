@@ -37,11 +37,12 @@ const server = new McpServer({ name: "harness-router", version: "0.0.1" });
 
 server.tool(
   "route",
-  "Look up which installed capability (MCP tool, skill, or CLI) is relevant " +
-    "to a task, before starting it. State only the positively requested action and its direct object; " +
-    "omit background, merely mentioned, rejected, or negated candidate actions. Do not copy the raw prompt. " +
-    "Returns pointers, not full content. " +
-    "Empty result is expected and means nothing relevant is installed.",
+  "Look up which installed capability (MCP tool, skill, or CLI) fits a task before you start it. " +
+    "State only the positively requested action and its direct object; do not copy the raw prompt. " +
+    "Drop chit-chat, venting, background, and any rejected, negated, or hypothetical option. " +
+    "If a request is buried in chat, route only the request; if the message names several distinct actions, call route once per action. " +
+    "Example: 'ugh CI is flaky, anyway find where we parse the auth token' -> query 'find the code that parses the auth token'. " +
+    "Returns pointers, not full content. An empty result is expected and means nothing installed fits.",
   { query: z.string(), k: z.number().optional() },
   async ({ query, k }) => {
     const index = await loadIndex(RECIPE_PATHS);
