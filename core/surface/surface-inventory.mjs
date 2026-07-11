@@ -1,13 +1,15 @@
-import { readActiveSelection, resolveRecipePaths } from "../state/bundle-state.mjs";
+import { readActiveSelection, resolveRecipePaths, resolveRuntimeRoot } from "../state/bundle-state.mjs";
 import { capabilityKind } from "../registry/capability-kind.mjs";
 import { DEFAULT_CACHE_PATH, readEnrichmentCache } from "../registry/enrich.mjs";
 import { loadIndex } from "../registry/registry.mjs";
-import { resolve } from "node:path";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { collectConnectorLinks } from "../../scripts/link/link-connectors.mjs";
 import { collectHookLinks } from "../../scripts/link/link-hooks.mjs";
 import { collectSurfaceMatrix } from "./surface-matrix.mjs";
 
 const SCOPES = ["project", "global"];
+const PACKAGE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 
 function statusRank(status) {
   if (status === "missing") return 2;
@@ -57,8 +59,9 @@ function enrichmentRows(capabilities, cache) {
     .sort((a, b) => statusRank(b.status) - statusRank(a.status) || a.type.localeCompare(b.type) || a.id.localeCompare(b.id));
 }
 
-export async function collectSurfaceInventory({ cwd = process.cwd() } = {}) {
-  const recipePaths = resolveRecipePaths(cwd, readActiveSelection(cwd));
+export async function collectSurfaceInventory({ cwd = process.cwd(), packageRoot = PACKAGE_ROOT } = {}) {
+  const root = resolveRuntimeRoot(cwd, packageRoot);
+  const recipePaths = resolveRecipePaths(root, readActiveSelection(root));
   const index = await loadIndex(recipePaths);
   const capabilities = capabilityRows(index);
   const enrichCachePath = resolve(cwd, DEFAULT_CACHE_PATH);

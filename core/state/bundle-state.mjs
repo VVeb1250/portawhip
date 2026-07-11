@@ -17,6 +17,10 @@ export function activeSelectionPathFor(root) {
   return join(root, ".hp-state", "active-recipes.json");
 }
 
+export function resolveRuntimeRoot(cwd, packageRoot) {
+  return existsSync(join(cwd, "recipe.yaml")) ? cwd : packageRoot;
+}
+
 export function readActiveSelection(root) {
   const path = activeSelectionPathFor(root);
   if (!existsSync(path)) return { foundry: false, roles: [] };

@@ -12,18 +12,14 @@ import { computeFactors } from "../state/feedback.mjs";
 import { stackFactors, combineFactors } from "../state/stack-detect.mjs";
 import { harvestHardNegatives } from "../registry/eval-harvest.mjs";
 import { runEnrichment } from "../registry/enrich.mjs";
-import { readActiveSelection, resolveRecipePaths } from "../state/bundle-state.mjs";
+import { readActiveSelection, resolveRecipePaths, resolveRuntimeRoot } from "../state/bundle-state.mjs";
 import { dirname, resolve, join } from "node:path";
 import { appendFileSync, existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 const PACKAGE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 
-function runtimeRoot(cwd = process.cwd()) {
-  return existsSync(join(cwd, "recipe.yaml")) ? cwd : PACKAGE_ROOT;
-}
-
-function runtimeFile(path, root = runtimeRoot()) {
+function runtimeFile(path, root = resolveRuntimeRoot(process.cwd(), PACKAGE_ROOT)) {
   if (existsSync(resolve(path))) return path;
   return join(root, path);
 }
@@ -68,7 +64,7 @@ async function main() {
   // Otherwise resolve whatever bundles the user has opted into via
   // scripts/bundles.mjs select, defaulting to just this project's
   // recipe.yaml when nothing has been selected (today's exact behavior).
-  const root = runtimeRoot();
+  const root = resolveRuntimeRoot(process.cwd(), PACKAGE_ROOT);
   const recipePaths = args.recipe ?? resolveRecipePaths(root, readActiveSelection(root));
   const primaryRecipe = Array.isArray(recipePaths) ? recipePaths[recipePaths.length - 1] : recipePaths;
   const index = await loadIndex(recipePaths, { discover: !args["no-discover"] });
