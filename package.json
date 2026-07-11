@@ -1,13 +1,53 @@
 {
   "name": "portawhip",
-  "private": true,
+  "private": false,
   "type": "module",
   "version": "0.1.0",
   "description": "Tools collector + context-cheap router for AI agent hosts: dispatches capability install to add-mcp/mise/asm, then routes the right one at the right moment instead of loading everything into context.",
   "license": "MIT",
+  "homepage": "https://github.com/VVeb1250/portawhip#readme",
+  "bugs": {
+    "url": "https://github.com/VVeb1250/portawhip/issues"
+  },
   "repository": {
     "type": "git",
     "url": "https://github.com/VVeb1250/portawhip.git"
+  },
+  "keywords": [
+    "ai-agents",
+    "mcp",
+    "model-context-protocol",
+    "agent-tools",
+    "tool-router",
+    "claude-code",
+    "codex",
+    "gemini-cli",
+    "developer-tools"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "bin": {
+    "portawhip": "scripts/tui.mjs",
+    "portawhip-router": "core/router/router-cli.mjs",
+    "harness-router": "server/mcp-server.mjs"
+  },
+  "files": [
+    "adapters/",
+    "core/",
+    "docs/router-eval-set.jsonl",
+    "recipes/",
+    "scripts/",
+    "server/",
+    "skills/",
+    "hooks.manifest.yaml",
+    "recipe.yaml",
+    "router.config.yaml",
+    "surface-matrix.yaml",
+    "VISION.md"
+  ],
+  "publishConfig": {
+    "access": "public"
   },
   "scripts": {
     "load": "node scripts/load.mjs",
