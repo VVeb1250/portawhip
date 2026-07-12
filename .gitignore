@@ -6,12 +6,15 @@ _verify_out.txt
 .agents/local.json.*.tmp
 .agents/generated/
 .agents/mcp_config.json
+.agents/agents.json
+.ai-config-sync-manager/
 CLAUDE.md
 .codex/
 .gemini/
 .mcp.json
 .vscode/mcp.json
 .claude/skills
+.claude/settings.json
 .cursor/
 .antigravity/
 .windsurf/

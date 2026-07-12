@@ -1,0 +1,30 @@
+{
+  "files.exclude": {
+    "**/.codex": true,
+    "**/.claude": true,
+    "**/.gemini": true,
+    "**/.cursor": true,
+    "**/.antigravity": true,
+    "**/.agents/mcp_config.json": true,
+    "**/.windsurf": true,
+    "**/.opencode": true,
+    "**/.junie": true,
+    "**/.mcp.json": true,
+    "**/opencode.json": true,
+    "**/.agents/generated": true
+  },
+  "search.exclude": {
+    "**/.codex": true,
+    "**/.claude": true,
+    "**/.gemini": true,
+    "**/.cursor": true,
+    "**/.antigravity": true,
+    "**/.agents/mcp_config.json": true,
+    "**/.windsurf": true,
+    "**/.opencode": true,
+    "**/.junie": true,
+    "**/.mcp.json": true,
+    "**/opencode.json": true,
+    "**/.agents/generated": true
+  }
+}

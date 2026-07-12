@@ -155,7 +155,7 @@ Please report security issues through the private process in [SECURITY.md](SECUR
 
 ## Contributing
 
-Bug reports, host adapters, routing eval cases, and documentation improvements are welcome. Start with [CONTRIBUTING.md](CONTRIBUTING.md) and the open [issues](https://github.com/VVeb1250/portawhip/issues).
+Bug reports, host adapters, routing eval cases, and documentation improvements are welcome. Start with [CONTRIBUTING.md](CONTRIBUTING.md) and the open [issues](https://github.com/VVeb1250/portawhip/issues). Release process and maintainer workflow live in [MAINTAINING.md](MAINTAINING.md).
 
 ## License
 
