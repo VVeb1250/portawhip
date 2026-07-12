@@ -9,7 +9,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import yaml from "js-yaml";
+import * as yaml from "js-yaml";
 import spawnSync from "cross-spawn";
 import * as discover from "../registry/discover.mjs";
 import { discoverEmbeddedHooks } from "./discover-hooks.mjs";

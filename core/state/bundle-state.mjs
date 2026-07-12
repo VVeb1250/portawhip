@@ -11,7 +11,7 @@
 
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { dirname, isAbsolute, join } from "node:path";
-import yaml from "js-yaml";
+import * as yaml from "js-yaml";
 
 export function activeSelectionPathFor(root) {
   return join(root, ".hp-state", "active-recipes.json");

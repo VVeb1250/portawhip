@@ -13,7 +13,7 @@
 
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
-import yaml from "js-yaml";
+import * as yaml from "js-yaml";
 import { readActiveSelection, resolveRecipePaths } from "../../core/state/bundle-state.mjs";
 import { readRawEntries } from "../../core/registry/registry.mjs";
 import { discoverAll } from "../../core/registry/discover.mjs";

@@ -4,7 +4,7 @@
 
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
 import { dirname, resolve, join } from "node:path";
-import yaml from "js-yaml";
+import * as yaml from "js-yaml";
 import { discoverAll } from "./discover.mjs";
 
 // Cache lives next to whichever recipe.yaml was actually loaded — not cwd —
