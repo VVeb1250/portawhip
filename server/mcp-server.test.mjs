@@ -117,10 +117,10 @@ test("mcp-server: route tool asks for a reasoned requested-action summary", asyn
   assert.deepEqual(Object.keys(routeTool.inputSchema.properties).sort(), ["k", "query"]);
 });
 
-test("mcp-server: reasoned meta-discussion summaries abstain", async () => {
+test("mcp-server: concise router-analysis actions can still abstain", async () => {
   const summaries = [
-    "compare architectural design choices; no operational action is requested",
-    "analyze context-efficiency principles; no operational action is requested",
+    "compare capability-router architecture choices",
+    "analyze router context-efficiency principles",
   ];
   for (const summary of summaries) {
     const { result } = await callRoute(summary);

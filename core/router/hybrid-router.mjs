@@ -67,6 +67,44 @@ const BROAD_TERMS = new Set([
   "capability",
 ]);
 
+function isWordChar(value) {
+  return typeof value === "string" && /[\p{L}\p{N}_]/u.test(value);
+}
+
+function containsBoundedPhrase(text, phrase) {
+  const haystack = text.toLocaleLowerCase();
+  const needle = phrase.trim().toLocaleLowerCase();
+  if (!needle) return false;
+  let offset = 0;
+  while (offset <= haystack.length - needle.length) {
+    const index = haystack.indexOf(needle, offset);
+    if (index < 0) return false;
+    const before = index > 0 ? haystack[index - 1] : null;
+    const afterIndex = index + needle.length;
+    const after = afterIndex < haystack.length ? haystack[afterIndex] : null;
+    if (!isWordChar(before) && !isWordChar(after)) return true;
+    offset = index + 1;
+  }
+  return false;
+}
+
+function hasDirectCuratedTrigger(candidate, prompt) {
+  return (
+    candidate.doc?.origin === "recipe" &&
+    (candidate.doc.triggers ?? []).some((trigger) => containsBoundedPhrase(prompt, trigger))
+  );
+}
+
+function candidateBar(candidate, prompt, { autoBar, recipeBar, toolBar }) {
+  const isTool = candidate.doc.type === "mcp" || candidate.doc.type === "cli";
+  const base = candidate.doc.origin === "recipe" ? recipeBar : isTool ? toolBar : autoBar;
+  // A full, bounded match on a deliberately authored recipe trigger is the
+  // hybrid equivalent of keyword scorer's trusted single-trigger hit. This
+  // prevents clean installs from depending on machine-local graph/feedback
+  // boosts while keeping generic token overlap behind the calibrated bar.
+  return hasDirectCuratedTrigger(candidate, prompt) ? Math.min(base, candidate.score) : base;
+}
+
 // Infinity means "sole lane survivor, nothing to be tied with" - the same
 // no-penalty case gateLane already treats as automatically dominant.
 function laneMarginRatio(laneCandidates) {
@@ -237,7 +275,10 @@ export async function routeHybrid(
   // autoBar so high. Reusing autoBar for them was silently dropping real
   // "use <tool>" matches (exa/github/playwright tools).
   const toolBar = hybridToolThreshold ?? Math.min(autoBar, 80);
-  const minScore = Math.min(autoBar, recipeBar, toolBar);
+  // Direct curated triggers may score below the corpus-wide calibrated bars
+  // (short CLI docs are especially sparse), so retrieval must not discard
+  // them before candidateBar can apply the exact-trigger trust path.
+  const minScore = 0;
   // No early-return on an empty sparse hit list: a genuine paraphrase can
   // share zero lexical vocabulary with any doc field at all, and dense
   // retrieval below runs independently of minisearch - exiting here would
@@ -257,13 +298,11 @@ export async function routeHybrid(
   const candidates = expanded
     .filter((candidate) => matchesSuggestKind(candidate.doc.type, suggest))
     .map((candidate) => {
-      const isTool = candidate.doc.type === "mcp" || candidate.doc.type === "cli";
-      const bar = candidate.doc.origin === "recipe" ? recipeBar : isTool ? toolBar : autoBar;
+      const bar = candidateBar(candidate, prompt, { autoBar, recipeBar, toolBar });
       return { ...candidate, bar };
     });
   const filtered = candidates.filter((candidate) => {
-    const isTool = candidate.doc.type === "mcp" || candidate.doc.type === "cli";
-    const bar = candidate.doc.origin === "recipe" ? recipeBar : isTool ? toolBar : autoBar;
+    const bar = candidateBar(candidate, prompt, { autoBar, recipeBar, toolBar });
     return candidate.score >= bar && classifyCandidate(candidate, bar).tier !== "irrelevant_but_keyword_matched";
   });
 
