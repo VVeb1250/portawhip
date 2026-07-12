@@ -2,6 +2,13 @@
 
 All notable user-facing changes are documented here.
 
+## [0.2.1](https://github.com/VVeb1250/portawhip/compare/portawhip-v0.2.0...portawhip-v0.2.1) (2026-07-12)
+
+
+### Bug Fixes
+
+* drop npm run doctor from CI publish gate, add manual re-publish trigger ([be3d388](https://github.com/VVeb1250/portawhip/commit/be3d388bd7c0793166627a86013d54e677c8e062))
+
 ## [0.2.0](https://github.com/VVeb1250/portawhip/compare/portawhip-v0.1.0...portawhip-v0.2.0) (2026-07-12)
 
 
