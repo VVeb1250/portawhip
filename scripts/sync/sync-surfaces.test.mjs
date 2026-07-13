@@ -5,15 +5,15 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { installableEntries, parseArgs, syncSurfaces } from "./sync-surfaces.mjs";
 
-test("sync-surfaces: parses sync/check/watch commands", () => {
+test("sync-surfaces: exposes manual sync/check only (no watchdog command)", () => {
   assert.equal(parseArgs(["node", "sync-surfaces.mjs"]).command, "sync");
   assert.equal(parseArgs(["node", "sync-surfaces.mjs", "check", "--json"]).json, true);
-  assert.equal(parseArgs(["node", "sync-surfaces.mjs", "watch", "--once", "--interval", "50"]).once, true);
+  assert.throws(() => parseArgs(["node", "sync-surfaces.mjs", "watch"]), /usage/);
   assert.throws(() => parseArgs(["node", "sync-surfaces.mjs", "wat"]), /usage/);
   assert.throws(() => parseArgs(["node", "sync-surfaces.mjs", "sync", "--scope", "all"]), /invalid scope/);
 });
 
-test("sync-surfaces: only CLI and skill entries are installable", () => {
+test("sync-surfaces: only CLI entries bypass rulesync", () => {
   const entries = [
     { id: "docs", type: "mcp" },
     { id: "rg", type: "cli" },
@@ -23,11 +23,11 @@ test("sync-surfaces: only CLI and skill entries are installable", () => {
   ];
   assert.deepEqual(
     installableEntries(entries).map((entry) => entry.id),
-    ["rg", "pdf"],
+    ["rg"],
   );
 });
 
-test("sync-surfaces: check runs agents sync --check and does not install CLI/skills", async () => {
+test("sync-surfaces: check delegates fan-out to the guarded reconciler and leaves only CLI to mise", async () => {
   const root = mkdtempSync(join(tmpdir(), "surface-check-"));
   writeFileSync(
     join(root, "recipe.yaml"),
@@ -48,19 +48,16 @@ test("sync-surfaces: check runs agents sync --check and does not install CLI/ski
   const result = await syncSurfaces({
     root,
     check: true,
-    runner: (cmd, args) => {
-      calls.push([cmd, args]);
-      return true;
+    reconciler: async (options) => {
+      calls.push(options);
+      return { status: "success", targets: [] };
     },
   });
-  assert.equal(result.lanes.length, 3);
-  assert.equal(result.lanes[0].lane, "mcp");
-  assert.deepEqual(calls[0][1], ["sync", "--verbose", "--check"]);
-  assert.equal(result.lanes[1].lane, "cli+skills");
+  assert.equal(result.lanes.length, 2);
+  assert.equal(result.lanes[0].lane, "fan-out");
+  assert.equal(result.lanes[0].backend, "rulesync via reconciler");
+  assert.deepEqual(calls[0], { command: "check", scope: "project", root, allowApply: false });
+  assert.equal(result.lanes[1].lane, "cli");
   assert.equal(result.lanes[1].action, "planned");
-  assert.equal(result.lanes[1].count, 2);
-  // Phase S2: commands+agents managed-copy lane. The temp recipe has no
-  // command/agent entries, so it plans zero targets but the lane is present.
-  assert.equal(result.lanes[2].lane, "commands+agents");
-  assert.equal(result.lanes[2].action, "planned");
+  assert.equal(result.lanes[1].count, 1);
 });

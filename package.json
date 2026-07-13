@@ -28,7 +28,7 @@
     "node": ">=20"
   },
   "bin": {
-    "portawhip": "scripts/tui.mjs",
+    "portawhip": "scripts/portawhip.mjs",
     "portawhip-router": "core/router/router-cli.mjs",
     "harness-router": "server/mcp-server.mjs"
   },
@@ -39,9 +39,10 @@
     "CHANGELOG.md",
     "SECURITY.md",
     "recipes/",
+    ".rulesync/",
+    "rulesync.jsonc",
     "scripts/",
     "server/",
-    "skills/",
     "hooks.manifest.yaml",
     "recipe.yaml",
     "router.config.yaml",
@@ -55,21 +56,18 @@
     "load": "node scripts/load.mjs",
     "doctor": "node scripts/doctor.mjs",
     "connectors": "node scripts/link/link-connectors.mjs status",
-    "connectors:link": "node scripts/link/link-connectors.mjs install",
     "hooks": "node scripts/link/link-hooks.mjs status",
-    "hooks:link": "node scripts/link/link-hooks.mjs install",
     "sync-config": "node scripts/sync/sync-config.mjs status",
     "sync-config:preview": "node scripts/sync/sync-config.mjs preview",
-    "agents": "node scripts/sync/agents-surface.mjs",
-    "agents:connect": "node scripts/sync/agents-surface.mjs connect",
-    "agents:mcp": "node scripts/sync/agents-surface.mjs mcp",
     "surface": "node scripts/surface-inventory.mjs",
     "import": "node scripts/sync/import-surfaces.mjs status",
     "import:preview": "node scripts/sync/import-surfaces.mjs preview",
     "hooks:embedded": "node scripts/embedded-hooks.mjs",
     "surface:sync": "node scripts/sync/sync-surfaces.mjs sync",
     "surface:sync:check": "node scripts/sync/sync-surfaces.mjs check",
-    "surface:watch": "node scripts/sync/sync-surfaces.mjs watch",
+    "sync:check": "node scripts/sync/reconcile.mjs check",
+    "sync:verify": "node scripts/sync/reconcile.mjs verify",
+    "sync:seed": "node scripts/sync/seed-rulesync.mjs preview",
     "tui": "node scripts/tui.mjs",
     "bundles": "node scripts/bundles.mjs list",
     "bundles:status": "node scripts/bundles.mjs status",
@@ -92,10 +90,10 @@
     "ink": "^5.2.1",
     "js-yaml": "^5.2.1",
     "minisearch": "^7.2.0",
-    "react": "^18.3.1"
+    "react": "^18.3.1",
+    "rulesync": "9.6.3"
   },
   "devDependencies": {
-    "@agents-dev/cli": "^0.8.9",
     "ai-config-sync-manager": "0.1.7"
   }
 }

@@ -42,7 +42,7 @@ test("withMarker: prepends when there is no frontmatter", () => {
   assert.match(marked, /^<!-- portawhip-managed: x -->/);
 });
 
-test("install then remove roundtrip via injected temp catalog (no host writes)", () => {
+test("surface linker is inventory-only; Rulesync owns command and agent writes", () => {
   const dir = mkdtempSync(join(tmpdir(), "link-surfaces-"));
   const srcDir = join(dir, "src");
   const destDir = join(dir, "codex", "agents");
@@ -62,15 +62,12 @@ test("install then remove roundtrip via injected temp catalog (no host writes)",
   assert.equal(byHost.codex, "missing");
   assert.equal(byHost["gemini-cli"], "unsupported");
 
-  collectSurfaceLinks({ command: "install", scope: "global", entries, targets });
-  const destFile = join(destDir, "reviewer.md");
-  assert.ok(existsSync(destFile), "copied to codex dir");
-  assert.ok(isManaged(readFileSync(destFile, "utf8")), "copy carries the managed marker");
-
-  // idempotent install
-  const again = collectSurfaceLinks({ command: "install", scope: "global", entries, targets });
-  assert.ok(again.rows.every((r) => !r.changed), "second install is a no-op");
-
-  collectSurfaceLinks({ command: "remove", scope: "global", entries, targets });
-  assert.ok(!existsSync(destFile), "remove strips the managed copy");
+  assert.throws(
+    () => collectSurfaceLinks({ command: "install", scope: "global", entries, targets }),
+    /inventory-only.*Rulesync/i,
+  );
+  assert.throws(
+    () => collectSurfaceLinks({ command: "remove", scope: "global", entries, targets }),
+    /inventory-only.*Rulesync/i,
+  );
 });

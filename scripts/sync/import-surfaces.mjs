@@ -2,8 +2,7 @@
 // Import direction (Phase S1): read what's actually installed across hosts
 // (via the same core/discover.mjs the router already uses) and PROPOSE it as
 // persistent, shareable canonical entries — CLI/skill into recipes/
-// imported.yaml, MCP into .agents/agents.json's mcp.servers block (which
-// @agents-dev/cli then fans out to other hosts).
+// imported.yaml, MCP into .rulesync/mcp.json for the sole fan-out writer.
 //
 // This owns no discovery or sync logic: discovery is discover.mjs, fan-out is
 // the existing loader/agents-dotdir lanes. Import only diffs "installed
@@ -18,10 +17,11 @@ import { readActiveSelection, resolveRecipePaths } from "../../core/state/bundle
 import { readRawEntries } from "../../core/registry/registry.mjs";
 import { discoverAll } from "../../core/registry/discover.mjs";
 import { enrichCliLadder } from "../../core/registry/cli-enrich.mjs";
+import { normalizeMcpConfig, unionMcpServers } from "../../core/surface/rulesync-canonical.mjs";
 
 const VALID_ACTIONS = new Set(["status", "preview", "apply"]);
 const IMPORTED_RECIPE = ["cli", "skill", "command", "agent"]; // land in imported.yaml
-const AGENTS_MCP = ["mcp"]; // land in .agents/agents.json
+const RULESYNC_MCP = ["mcp"]; // land in .rulesync/mcp.json
 // Surfaces shown in full (every id listed) vs summarized (count + sample);
 // nothing is hidden — large groups just don't flood the preview. No type is
 // suppressed by default: display groups by surface, apply still needs an
@@ -65,13 +65,13 @@ export function parseArgs(argv) {
 // Ids already canonical: curated recipe/bundle/imported entries + MCP servers
 // already declared in .agents/agents.json. A candidate matching any of these
 // is not "new" and is skipped.
-export function knownIds({ root, recipePaths, agentsJson }) {
+export function knownIds({ root, recipePaths, mcpJson, agentsJson }) {
   const ids = new Set();
   for (const path of recipePaths) {
     if (!existsSync(path)) continue;
     for (const entry of readRawEntries(path)) if (entry.id) ids.add(entry.id);
   }
-  const servers = agentsJson?.mcp?.servers ?? {};
+  const servers = mcpJson?.mcpServers ?? agentsJson?.mcp?.servers ?? {};
   for (const name of Object.keys(servers)) ids.add(name);
   return ids;
 }
@@ -151,8 +151,8 @@ function readYamlList(path) {
   return Array.isArray(raw) ? raw : [];
 }
 
-function readAgentsJson(root) {
-  const path = join(root, ".agents", "agents.json");
+function readRulesyncMcp(root) {
+  const path = join(root, ".rulesync", "mcp.json");
   if (!existsSync(path)) return { path, json: null };
   try {
     return { path, json: JSON.parse(readFileSync(path, "utf8")) };
@@ -164,38 +164,37 @@ function readAgentsJson(root) {
 // MCP launch config isn't carried by discoverMcp (it dedups to id+source), so
 // fetch it from add-mcp the same way core/enrich.mjs does, only for the
 // servers actually being imported.
-async function mcpConfigs(serverNames) {
-  if (!serverNames.length) return {};
-  const { listInstalledServers } = await import("add-mcp");
-  const hosts = await listInstalledServers({ global: true });
-  const configs = {};
-  for (const host of hosts) {
-    for (const server of host.servers ?? []) {
-      if (serverNames.includes(server.serverName) && server.config && !configs[server.serverName]) {
-        configs[server.serverName] = server.config;
-      }
-    }
-  }
-  return configs;
+export function collectMcpConfigs(serverNames, hosts) {
+  const wanted = new Set(serverNames);
+  const filtered = hosts.map((host) => ({
+    ...host,
+    servers: (host.servers ?? []).filter((server) => wanted.has(server.serverName) && server.config),
+  }));
+  const union = unionMcpServers(filtered);
+  return { configs: union.servers, conflicts: union.conflicts, warnings: union.warnings };
 }
 
-// Pure: add imported MCP servers into an agents.json object's mcp.servers.
-export function mergeAgentsMcp(agentsJson, mcpEntries, configs) {
-  const json = agentsJson ? structuredClone(agentsJson) : { schemaVersion: 3, mcp: { servers: {} } };
-  json.mcp = json.mcp ?? {};
-  json.mcp.servers = json.mcp.servers ?? {};
+async function mcpConfigs(serverNames) {
+  if (!serverNames.length) return { configs: {}, conflicts: [], warnings: [] };
+  const { listInstalledServers } = await import("add-mcp");
+  const hosts = await listInstalledServers({ global: true });
+  return collectMcpConfigs(serverNames, hosts);
+}
+
+// Pure: add imported MCP servers into rulesync's canonical mcpServers map.
+export function mergeRulesyncMcp(mcpJson, mcpEntries, configs) {
+  const json = mcpJson
+    ? structuredClone(mcpJson)
+    : { $schema: "https://github.com/dyoshikawa/rulesync/releases/download/v9.6.3/mcp-schema.json", mcpServers: {} };
+  json.mcpServers = json.mcpServers ?? {};
   const added = [];
   for (const entry of mcpEntries) {
-    if (json.mcp.servers[entry.id]) continue;
+    if (json.mcpServers[entry.id]) continue;
     const config = configs[entry.id];
     if (!config) continue; // no launch config recoverable -> skip, report
-    json.mcp.servers[entry.id] = {
-      transport: config.url ? "http" : "stdio",
-      enabled: true,
-      description: entry.route?.description ?? `Imported MCP server: ${entry.id}`,
-      ...(config.url ? { url: config.url } : { command: config.command, args: config.args ?? [] }),
-      imported: { at: new Date().toISOString() },
-    };
+    const normalized = normalizeMcpConfig(config);
+    if (!normalized.config) continue;
+    json.mcpServers[entry.id] = normalized.config;
     added.push(entry.id);
   }
   return { json, added };
@@ -204,14 +203,14 @@ export function mergeAgentsMcp(agentsJson, mcpEntries, configs) {
 export async function collectImport({ root = resolve("."), action = "status", types = null, include = null } = {}) {
   const selection = readActiveSelection(root);
   const recipePaths = resolveRecipePaths(root, selection);
-  const { json: agentsJson, path: agentsPath } = readAgentsJson(root);
-  const known = knownIds({ root, recipePaths, agentsJson });
+  const { json: mcpJson, path: mcpPath } = readRulesyncMcp(root);
+  const known = knownIds({ root, recipePaths, mcpJson });
   const discovered = await discoverAll();
   const candidates = computeCandidates({ discovered, known, types, include });
 
-  const byLane = { recipe: [], agentsMcp: [] };
+  const byLane = { recipe: [], rulesyncMcp: [] };
   for (const entry of candidates) {
-    if (AGENTS_MCP.includes(entry.type)) byLane.agentsMcp.push(entry);
+    if (RULESYNC_MCP.includes(entry.type)) byLane.rulesyncMcp.push(entry);
     else if (IMPORTED_RECIPE.includes(entry.type)) byLane.recipe.push(entry);
   }
 
@@ -223,7 +222,7 @@ export async function collectImport({ root = resolve("."), action = "status", ty
     candidates: candidates.map((e) => ({ id: e.id, type: e.type })),
     lanes: {
       recipe: byLane.recipe.map((e) => e.id),
-      agentsMcp: byLane.agentsMcp.map((e) => e.id),
+      rulesyncMcp: byLane.rulesyncMcp.map((e) => e.id),
     },
     applied: null,
   };
@@ -252,8 +251,23 @@ export async function collectImport({ root = resolve("."), action = "status", ty
     else heldBack.push(entry.id);
   }
   const merged = mergeImported(existing, additions);
-  const configs = await mcpConfigs(byLane.agentsMcp.map((e) => e.id));
-  const { json: newAgents, added: mcpAdded } = mergeAgentsMcp(agentsJson, byLane.agentsMcp, configs);
+  const mcpDiscovery = await mcpConfigs(byLane.rulesyncMcp.map((e) => e.id));
+  if (mcpDiscovery.conflicts.length > 0) {
+    result.applied = {
+      status: "blocked",
+      wrote: [],
+      conflicts: mcpDiscovery.conflicts,
+      warnings: mcpDiscovery.warnings,
+      mcpSkipped: byLane.rulesyncMcp.map((entry) => entry.id),
+      heldBack,
+    };
+    return result;
+  }
+  const { json: newMcp, added: mcpAdded } = mergeRulesyncMcp(
+    mcpJson,
+    byLane.rulesyncMcp,
+    mcpDiscovery.configs,
+  );
 
   const wrote = [];
   if (additions.length) {
@@ -261,10 +275,10 @@ export async function collectImport({ root = resolve("."), action = "status", ty
     wrote.push({ path: importedPath, added: additions.map((e) => e.id) });
   }
   if (mcpAdded.length) {
-    writeFileSync(agentsPath, `${JSON.stringify(newAgents, null, 2)}\n`);
-    wrote.push({ path: agentsPath, added: mcpAdded });
+    writeFileSync(mcpPath, `${JSON.stringify(newMcp, null, 2)}\n`);
+    wrote.push({ path: mcpPath, added: mcpAdded });
   }
-  const mcpSkipped = byLane.agentsMcp.map((e) => e.id).filter((id) => !mcpAdded.includes(id));
+  const mcpSkipped = byLane.rulesyncMcp.map((e) => e.id).filter((id) => !mcpAdded.includes(id));
   result.applied = { wrote, mcpSkipped, heldBack };
   return result;
 }
@@ -301,7 +315,11 @@ function printText(result) {
     if (result.applied.mcpSkipped.length) {
       console.log(`SKIPPED (no recoverable launch config): ${result.applied.mcpSkipped.join(", ")}`);
     }
-    console.log("next: run `npm run sync-surfaces sync` (or agents sync) to fan out to other hosts.");
+    if (result.applied.status === "blocked") {
+      console.log(`BLOCKED (conflicting host MCP variants): ${result.applied.conflicts.map((item) => item.name).join(", ")}`);
+    } else {
+      console.log("next: run `portawhip sync apply --scope project --apply` to fan out through the guarded reconciler.");
+    }
   } else if (result.action === "preview") {
     console.log("next: re-run with `apply --apply` to write these; hand-curated recipe.yaml always wins on id collision.");
   }

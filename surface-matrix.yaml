@@ -25,8 +25,8 @@ surfaces:
       owner: "discover.mjs:discoverMcp"
       probe: { kind: discover, fn: mcp, heavy: true }
     write:
-      owner: "add-mcp + agents-dotdir"
-      probe: { kind: command, argv: [agents, --version] }
+      owner: "rulesync via guarded reconciler"
+      probe: { kind: command, argv: [node, scripts/portawhip.mjs, sync, check, --scope, project, --json] }
 
   - id: cli
     label: CLI tools
@@ -43,8 +43,8 @@ surfaces:
       owner: "discover.mjs:discoverSkills"
       probe: { kind: discover, fn: skills, heavy: true }
     write:
-      owner: "agent-skill-manager (via load.mjs)"
-      probe: { kind: command, argv: [agent-skill-manager, --version] }
+      owner: "rulesync (primary) + agent-skill-manager (non-overlapping long-tail hosts only)"
+      probe: { kind: command, argv: [node, scripts/portawhip.mjs, sync, check, --scope, project, --json] }
 
   - id: command
     label: Slash commands
@@ -52,8 +52,8 @@ surfaces:
       owner: "discover.mjs:discoverCommands (+ host-native dirs)"
       probe: { kind: discover, fn: commands }
     write:
-      owner: "link-surfaces.mjs (managed-copy)"
-      probe: { kind: command, argv: [node, scripts/link/link-surfaces.mjs, status] }
+      owner: "rulesync via guarded reconciler"
+      probe: { kind: command, argv: [node, scripts/portawhip.mjs, sync, check, --scope, project, --json] }
 
   - id: agent
     label: Subagent defs
@@ -61,8 +61,8 @@ surfaces:
       owner: "discover.mjs:discoverAgents (+ host-native dirs)"
       probe: { kind: discover, fn: agents }
     write:
-      owner: "link-surfaces.mjs (managed-copy; gemini unsupported)"
-      probe: { kind: command, argv: [node, scripts/link/link-surfaces.mjs, status] }
+      owner: "rulesync via guarded reconciler"
+      probe: { kind: command, argv: [node, scripts/portawhip.mjs, sync, check, --scope, project, --json] }
 
   - id: hook-declared
     label: Hooks (declared)
@@ -70,8 +70,8 @@ surfaces:
       owner: "hooks.manifest.yaml (curated)"
       probe: { kind: command, argv: [node, scripts/link/link-hooks.mjs, status] }
     write:
-      owner: "link-hooks.mjs (native-hook hosts)"
-      probe: { kind: link-hooks }
+      owner: "rulesync via guarded reconciler (canonical hooks currently empty; auto-sync gated off)"
+      probe: { kind: command, argv: [node, scripts/portawhip.mjs, sync, check, --scope, project, --json] }
 
   - id: hook-embedded
     label: Hooks (embedded in skills/plugins)
@@ -86,8 +86,8 @@ surfaces:
   - id: instruction
     label: Instructions / router link
     read:
-      owner: "ai-config-sync (claude<->codex)"
+      owner: "link-connectors.mjs (read-only host inventory)"
       probe: { kind: command, argv: [node, scripts/link/link-connectors.mjs, status] }
     write:
-      owner: "ai-config-sync + link-connectors.mjs"
-      probe: { kind: link-connectors }
+      owner: "rulesync via guarded reconciler"
+      probe: { kind: command, argv: [node, scripts/portawhip.mjs, sync, check, --scope, project, --json] }

@@ -4,11 +4,9 @@ import { collectHookLinks } from "./link/link-hooks.mjs";
 export const LINK_SCOPES = ["project", "global", "all"];
 
 const LINK_TABS = new Set(["connectors", "hooks"]);
-const LINK_COMMANDS = new Set(["status", "install", "remove"]);
+const LINK_COMMANDS = new Set(["status"]);
 const COMMAND_BY_INPUT = new Map([
   ["s", "status"],
-  ["l", "install"],
-  ["x", "remove"],
 ]);
 
 const defaultCollectors = {
@@ -21,7 +19,7 @@ export function linkCommandForInput(tab, input) {
 }
 
 export function linkActionNeedsConfirmation(command) {
-  return command === "install" || command === "remove";
+  return false;
 }
 
 export function summarizeLinkAction(tab, result) {
@@ -41,7 +39,9 @@ export function summarizeLinkAction(tab, result) {
 
 export async function runLinkAction({ tab, command, scope, collectors = defaultCollectors } = {}) {
   if (!LINK_TABS.has(tab)) throw new Error(`unsupported TUI action tab: ${tab}`);
-  if (!LINK_COMMANDS.has(command)) throw new Error(`unsupported link action: ${command}`);
+  if (!LINK_COMMANDS.has(command)) {
+    throw new Error("connector/hook tabs are inventory-only; use portawhip sync apply so Rulesync owns the write");
+  }
   if (!LINK_SCOPES.includes(scope)) throw new Error(`unsupported link scope: ${scope}`);
 
   const collect = collectors[tab];

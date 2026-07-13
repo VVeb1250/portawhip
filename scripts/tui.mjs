@@ -7,6 +7,7 @@ import { CONFIG_SYNC_BACKENDS } from "../core/surface/config-sync-backends.mjs";
 import { DEFAULT_CACHE_PATH, runEnrichment } from "../core/registry/enrich.mjs";
 import { collectSurfaceInventory } from "../core/surface/surface-inventory.mjs";
 import { collectSyncConfig } from "./sync/sync-config.mjs";
+import { runReconcile } from "./sync/reconcile.mjs";
 import { LINK_SCOPES, linkActionNeedsConfirmation, linkCommandForInput, runLinkAction } from "./tui-actions.mjs";
 
 const TABS = ["overview", "sync", "connectors", "hooks", "enrich", "capabilities"];
@@ -22,14 +23,14 @@ const TAB_COPY = {
     action: "Use f for safe profiles first, p to preview, then a twice to apply.",
   },
   connectors: {
-    title: "MCP + instruction links",
-    description: "Check whether each host has the harness-router MCP server and instructions linked.",
-    action: "Choose scope with g, press l twice to repair links, or x twice to remove them.",
+    title: "MCP + instruction inventory",
+    description: "Read-only host inventory; Rulesync owns all config writes.",
+    action: "Choose scope with g and press s to refresh status; use the sync tab to write.",
   },
   hooks: {
-    title: "Native hooks",
-    description: "Check prompt/tool hooks that let the router suggest capabilities at the right moment.",
-    action: "Choose scope with g, press l twice to repair hooks, or x twice to remove them.",
+    title: "Native hook inventory",
+    description: "Read-only hook inventory; Rulesync owns all config writes.",
+    action: "Choose scope with g and press s to refresh status; use the sync tab to write.",
   },
   enrich: {
     title: "Tool descriptions",
@@ -59,11 +60,9 @@ const SYNC_INCLUDE_PRESETS = [
 ];
 const SYNC_PROFILES = [
   { id: "manual", label: "manual", backends: null, scope: null, include: null },
-  { id: "ai-project-instructions", label: "ai project instructions", backends: ["ai-config-sync"], scope: "project", include: "instructions" },
-  { id: "ai-global-instructions", label: "ai global instructions", backends: ["ai-config-sync"], scope: "global", include: "instructions" },
-  { id: "ai-project-mcp", label: "ai project mcp", backends: ["ai-config-sync"], scope: "project", include: "mcp" },
+  { id: "rulesync-project", label: "rulesync project", backends: ["rulesync"], scope: "project", include: "all" },
+  { id: "rulesync-global", label: "rulesync global", backends: ["rulesync"], scope: "global", include: "all" },
   { id: "asm-status", label: "asm status", backends: ["agent-skill-manager"], scope: "all", include: null },
-  { id: "agents-check", label: "agents check", backends: ["agents-dotdir"], scope: "all", include: null },
 ];
 const STATUS_COLORS = {
   linked: "green",
@@ -257,7 +256,7 @@ function Overview({ inventory }) {
     ),
     React.createElement(Text, { color: "cyan", bold: true }, "Start here"),
     React.createElement(Text, null, "1  Press 2, then f to choose a safe sync profile and p to preview."),
-    React.createElement(Text, null, "2  Press 3 or 4, choose a scope with g, then l twice to repair links."),
+    React.createElement(Text, null, "2  Press 3 or 4 to inspect connector and hook status without writing."),
     React.createElement(Text, null, "3  Press 5, then e when tool descriptions need enrichment."),
     React.createElement(Text, { color: "gray" }, "Press h or ? for the key map. Destructive actions always ask twice."),
   );
@@ -461,9 +460,8 @@ function SyncControls({ action, selection, armedApply }) {
   );
 }
 
-function LinkControls({ tab, scope, action, armedAction }) {
+function LinkControls({ tab, scope, action }) {
   const title = TAB_COPY[tab].title;
-  const confirmHint = armedAction ? `confirm ${action}: press ${action === "install" ? "l" : "x"} again` : "l repair  x remove";
   return React.createElement(
     Box,
     { flexDirection: "column", marginBottom: 1 },
@@ -475,7 +473,7 @@ function LinkControls({ tab, scope, action, armedAction }) {
       React.createElement(Text, { color: "gray" }, "  action "),
       React.createElement(Text, null, action),
     ),
-    React.createElement(Text, { color: "gray" }, `g scope  s status  ${confirmHint}  (${title})`),
+    React.createElement(Text, { color: "gray" }, `g scope  s status  read-only  (${title})`),
   );
 }
 
@@ -495,7 +493,7 @@ function HelpPanel({ tab, width }) {
     "1-6 jump tabs  tab/right next tab  left previous tab",
     "up/down select rows  r refresh  h or ? toggle help  q quit",
     "sync tab: f profile  b backend  g scope  d direction  i include  s status  p preview  a apply",
-    "connectors/hooks tabs: g scope  s status  l repair (press twice)  x remove (press twice)",
+    "connectors/hooks tabs: g scope  s status (read-only; writes use sync tab)",
     "enrich tab: e refresh cached tool descriptions",
   ];
   return React.createElement(
@@ -615,13 +613,34 @@ function App() {
           setSyncAction(action);
           setMessage("");
           Promise.resolve()
-            .then(() =>
-              collectSyncConfig({
-                action,
-                backends: syncSelectionState.backends,
-                options: syncSelectionState.options,
-              }),
-            )
+            .then(async () => {
+              if (action !== "apply") {
+                return collectSyncConfig({
+                  action,
+                  backends: syncSelectionState.backends,
+                  options: syncSelectionState.options,
+                });
+              }
+              const reconcile = await runReconcile({
+                command: "apply",
+                scope: syncSelectionState.options.scope,
+                root: process.cwd(),
+                allowApply: true,
+              });
+              return {
+                rows: [
+                  {
+                    backend: "rulesync",
+                    action: "apply",
+                    status: reconcile.status,
+                    ok: reconcile.status === "success",
+                    summary: `guarded reconcile ${reconcile.status}`,
+                    output: JSON.stringify(reconcile),
+                  },
+                ],
+                summary: `guarded reconcile ${reconcile.status}`,
+              };
+            })
             .then((result) => {
               setSyncResult(result);
               setMessage(result.summary);

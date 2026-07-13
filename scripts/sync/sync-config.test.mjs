@@ -1,55 +1,46 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { buildBackendArgs, runBackend } from "../../core/surface/config-sync-backends.mjs";
+import { CONFIG_SYNC_BACKENDS, buildBackendArgs, runBackend } from "../../core/surface/config-sync-backends.mjs";
 import { collectSyncConfig, parseArgs } from "./sync-config.mjs";
 
-test("sync-config: ai-config-sync preview builds a dry-run plan command", () => {
+test("sync-config: rulesync is the only steady-state fan-out writer", () => {
+  assert.equal(CONFIG_SYNC_BACKENDS.rulesync.steadyStateWriter, true);
+  assert.equal(CONFIG_SYNC_BACKENDS["ai-config-sync"].steadyStateWriter, false);
+  assert.equal(CONFIG_SYNC_BACKENDS["agent-skill-manager"].steadyStateWriter, false);
+  assert.equal(CONFIG_SYNC_BACKENDS["agents-dotdir"], undefined);
+  assert.equal(parseArgs(["node", "sync-config.mjs", "status"]).backends[0], "rulesync");
+});
+
+test("sync-config: rulesync preview builds a dry-run project command", () => {
   assert.deepEqual(
-    buildBackendArgs("ai-config-sync", "preview", {
-      from: "claude",
-      to: "codex",
-      scope: "project",
-      include: "instructions,skills",
-      exclude: "mcp",
-    }),
-    [
-      "sync",
-      "--dry-run",
-      "--plan-json",
-      "--from",
-      "claude",
-      "--to",
-      "codex",
-      "--scope",
-      "project",
-      "--include",
-      "instructions,skills",
-      "--exclude",
-      "mcp",
-    ],
+    buildBackendArgs("rulesync", "preview", { scope: "project" }),
+    ["generate", "--dry-run"],
+  );
+  assert.deepEqual(buildBackendArgs("rulesync", "status", { scope: "global" }), ["generate", "--check", "-g"]);
+});
+
+test("sync-config: apply is retired in favor of the guarded reconciler", () => {
+  assert.throws(() => parseArgs(["node", "sync-config.mjs", "apply"]), /explicit --apply/);
+  assert.throws(
+    () => parseArgs(["node", "sync-config.mjs", "apply", "--apply", "--include", "mcp:notion"]),
+    /portawhip sync apply.*backup.*ownership/i,
   );
 });
 
-test("sync-config: apply is guarded by an explicit flag", () => {
-  assert.throws(() => parseArgs(["node", "sync-config.mjs", "apply"]), /explicit --apply/);
-  assert.throws(() => parseArgs(["node", "sync-config.mjs", "apply", "--apply"]), /requires --include/);
-  assert.equal(parseArgs(["node", "sync-config.mjs", "apply", "--apply", "--include", "mcp:notion"]).allowApply, true);
-});
-
-test("sync-config: apply blocks broad all-skills writes", () => {
+test("sync-config: all apply selectors are routed through the reconciler", () => {
   assert.throws(
     () => parseArgs(["node", "sync-config.mjs", "apply", "--apply", "--include", "skills"]),
-    /all skills is blocked/,
+    /portawhip sync apply/i,
   );
-  assert.equal(
-    parseArgs(["node", "sync-config.mjs", "apply", "--apply", "--include", "skills:pdf"]).include,
-    "skills:pdf",
+  assert.throws(
+    () => parseArgs(["node", "sync-config.mjs", "apply", "--apply", "--include", "skills:pdf"]),
+    /portawhip sync apply/i,
   );
 });
 
 test("sync-config: profiles fill safe defaults", () => {
-  const args = parseArgs(["node", "sync-config.mjs", "preview", "--profile", "ai-project-instructions"]);
-  assert.equal(args.backends[0], "ai-config-sync");
+  const args = parseArgs(["node", "sync-config.mjs", "preview", "--profile", "project-instructions"]);
+  assert.equal(args.backends[0], "rulesync");
   assert.equal(args.scope, "project");
   assert.equal(args.include, "instructions");
 });
@@ -59,17 +50,13 @@ test("sync-config: agent-skill-manager is probe-only", () => {
   assert.throws(() => buildBackendArgs("asm", "preview"), /does not support preview/);
 });
 
-test("sync-config: .agents preview maps to sync --check", () => {
-  assert.deepEqual(buildBackendArgs(".agents", "preview"), ["sync", "--check"]);
-});
-
-test("sync-config: .agents preview planned changes are not install failures", () => {
+test("sync-config: rulesync check drift is not an invocation failure", () => {
   const runner = () => ({
     status: 1,
-    stdout: "\u001b[36m[info]\u001b[39m Would update 1 item(s):\n  -> .agents/agents.json\n",
+    stdout: "Generated files are out of date.\n",
     stderr: "",
   });
-  const row = runBackend("agents-dotdir", "preview", {}, runner);
+  const row = runBackend("rulesync", "status", {}, runner);
   assert.equal(row.ok, true);
   assert.equal(row.status, "changed");
   assert.equal(row.installHint, null);
@@ -94,11 +81,11 @@ test("sync-config: collect reports backend output in stable shape", () => {
     calls.push([cmd, args]);
     return { status: 0, stdout: "{\"ok\":true}\n", stderr: "" };
   };
-  const row = runBackend("ai-config-sync", "status", {}, runner);
+  const row = runBackend("rulesync", "status", {}, runner);
   assert.equal(row.status, "success");
-  assert.equal(row.backend, "ai-config-sync");
-  assert.match(row.command[0].replace(/\\/g, "/"), /(node_modules\/\.bin\/ai-config-sync|ai-config-sync)(\.cmd)?$/);
-  assert.deepEqual(row.command.slice(1), ["status", "--json"]);
+  assert.equal(row.backend, "rulesync");
+  assert.match(row.command[0].replace(/\\/g, "/"), /(node_modules\/\.bin\/rulesync|rulesync)(\.cmd)?$/);
+  assert.deepEqual(row.command.slice(1), ["generate", "--check"]);
 
   const result = collectSyncConfig({
     action: "status",
@@ -108,8 +95,8 @@ test("sync-config: collect reports backend output in stable shape", () => {
   });
   assert.equal(result.rows.length, 1);
   assert.equal(result.rows[0].backend, "agent-skill-manager");
-  assert.match(calls[0][0].replace(/\\/g, "/"), /(node_modules\/\.bin\/ai-config-sync|ai-config-sync)(\.cmd)?$/);
-  assert.deepEqual(calls[0][1], ["status", "--json"]);
+  assert.match(calls[0][0].replace(/\\/g, "/"), /(node_modules\/\.bin\/rulesync|rulesync)(\.cmd)?$/);
+  assert.deepEqual(calls[0][1], ["generate", "--check"]);
   assert.match(calls[1][0].replace(/\\/g, "/"), /agent-skill-manager(\.cmd)?$/);
   assert.deepEqual(calls[1][1], ["config", "show"]);
 });
@@ -122,9 +109,9 @@ test("sync-config: pinned local backend wins even when npx fallback is allowed",
   };
   const args = parseArgs(["node", "sync-config.mjs", "status", "--allow-npx"]);
   assert.equal(args.allowNpx, true);
-  runBackend("ai-config-sync", "status", { allowNpx: true }, runner);
-  assert.match(calls[0][0].replace(/\\/g, "/"), /(node_modules\/\.bin\/ai-config-sync|ai-config-sync)(\.cmd)?$/);
-  assert.deepEqual(calls[0][1], ["status", "--json"]);
+  runBackend("rulesync", "status", { allowNpx: true }, runner);
+  assert.match(calls[0][0].replace(/\\/g, "/"), /(node_modules\/\.bin\/rulesync|rulesync)(\.cmd)?$/);
+  assert.deepEqual(calls[0][1], ["generate", "--check"]);
 });
 
 test("sync-config: backend ledger inner errors make the wrapper fail", () => {

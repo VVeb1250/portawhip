@@ -19,12 +19,12 @@
 // sync) is the normal steady state.
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync, rmSync, appendFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import spawnSync from "cross-spawn";
 import { loadConfig } from "../../core/state/config.mjs";
+import { runReconcile } from "./reconcile.mjs";
 
-const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
+const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const STATE_DIR = join(ROOT, ".hp-state");
 const STATE_PATH = join(STATE_DIR, "auto-sync.state.json");
 const LOCK_PATH = join(STATE_DIR, "auto-sync.lock");
@@ -89,20 +89,16 @@ function releaseLock() {
   }
 }
 
-// Fan out canonical -> all hosts via the existing sync-surfaces lane (mise/
-// asm/agents-dotdir). Idempotent; only touches what is already canonical.
-function fanOut() {
-  const r = spawnSync.sync(process.execPath, [join(ROOT, "scripts", "sync-surfaces.mjs"), "sync"], {
-    cwd: ROOT,
-    encoding: "utf8",
-  });
-  return r.status === 0;
+// Automation and manual sync share the exact same backup/verify/ledger path.
+async function fanOut() {
+  const result = await runReconcile({ command: "apply", scope: "project", root: ROOT, allowApply: true });
+  return result.status === "success";
 }
 
 export async function runAutoSync({ now = Date.now(), config = null, fanOutImpl = fanOut } = {}) {
   const cfg = config ?? loadConfig(join(ROOT, "router.config.yaml"));
   const auto = cfg.autoSync ?? {};
-  if (auto.enabled === false) return { skipped: "disabled" };
+  if (auto.enabled !== true) return { skipped: "disabled" };
 
   const throttleMs = (Number(auto.throttleMinutes ?? 60) || 0) * 60 * 1000;
   const state = readState();
@@ -110,7 +106,7 @@ export async function runAutoSync({ now = Date.now(), config = null, fanOutImpl 
   if (!acquireLock(now)) return { skipped: "locked" };
 
   try {
-    const ok = fanOutImpl();
+    const ok = await fanOutImpl();
     log(`fan-out ${ok ? "ok" : "FAILED"}`);
     writeState({ ...state, lastRunAt: now, lastResult: ok ? "synced" : "sync-failed" });
     return { synced: ok };

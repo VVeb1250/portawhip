@@ -3,24 +3,39 @@ import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 
 const BACKEND_ALIASES = {
+  rule: "rulesync",
+  rs: "rulesync",
   ai: "ai-config-sync",
   "ai-config": "ai-config-sync",
   "ai-config-sync-manager": "ai-config-sync",
   asm: "agent-skill-manager",
   "agent-skills": "agent-skill-manager",
-  agents: "agents-dotdir",
-  ".agents": "agents-dotdir",
 };
 
 const MAX_OUTPUT_CHARS = 12000;
 
 export const CONFIG_SYNC_BACKENDS = {
+  rulesync: {
+    id: "rulesync",
+    label: "rulesync",
+    command: "rulesync",
+    npxPackage: "rulesync",
+    installHint: "npm install rulesync",
+    steadyStateWriter: true,
+    supports: {
+      status: true,
+      preview: true,
+      apply: true,
+    },
+    description: "Canonical one-way fan-out for instructions, MCP, skills, agents, commands, hooks, and permissions.",
+  },
   "ai-config-sync": {
     id: "ai-config-sync",
     label: "ai-config-sync-manager",
     command: "ai-config-sync",
     npxPackage: "ai-config-sync-manager",
     installHint: "npm install -g ai-config-sync-manager",
+    steadyStateWriter: false,
     supports: {
       status: true,
       preview: true,
@@ -34,6 +49,7 @@ export const CONFIG_SYNC_BACKENDS = {
     command: "agent-skill-manager",
     npxPackage: "agent-skill-manager",
     installHint: "npm install agent-skill-manager or run through npx --yes agent-skill-manager",
+    steadyStateWriter: false,
     supports: {
       status: true,
       preview: false,
@@ -41,23 +57,10 @@ export const CONFIG_SYNC_BACKENDS = {
     },
     description: "Skill provider inventory/probe backend already used by the loader for skill installs.",
   },
-  "agents-dotdir": {
-    id: "agents-dotdir",
-    label: "@agents-dev/cli",
-    command: "agents",
-    npxPackage: "@agents-dev/cli",
-    installHint: "npm install -g @agents-dev/cli",
-    supports: {
-      status: true,
-      preview: true,
-      apply: true,
-    },
-    description: "Project .agents/ source-of-truth sync for MCP servers, skills, and instructions across many hosts.",
-  },
 };
 
 export function normalizeBackendId(id) {
-  const raw = id ?? "ai-config-sync";
+  const raw = id ?? "rulesync";
   return BACKEND_ALIASES[raw] ?? raw;
 }
 
@@ -86,6 +89,13 @@ export function buildBackendArgs(backendId, action, options = {}) {
     ...(options.to ? ["--to", options.to] : []),
   ];
 
+  if (backend.id === "rulesync") {
+    const global = options.scope === "global" ? ["-g"] : [];
+    if (action === "status") return ["generate", "--check", ...global];
+    if (action === "preview") return ["generate", "--dry-run", ...global];
+    return ["generate", ...global];
+  }
+
   if (backend.id === "ai-config-sync") {
     if (action === "status") return ["status", "--json", ...scope, ...selectors];
     if (action === "preview") return ["sync", "--dry-run", "--plan-json", ...direction, ...scope, ...selectors];
@@ -101,12 +111,6 @@ export function buildBackendArgs(backendId, action, options = {}) {
 
   if (backend.id === "agent-skill-manager") {
     return ["config", "show"];
-  }
-
-  if (backend.id === "agents-dotdir") {
-    if (action === "status") return ["status", "--fast"];
-    if (action === "preview") return ["sync", "--check"];
-    return ["sync"];
   }
 
   throw new Error(`unhandled backend ${backend.id}`);
@@ -156,10 +160,10 @@ export function runBackend(backendId, action, options = {}, runner = spawnSync.s
 
 function isPlannedChangeExit(backendId, action, status, output) {
   return (
-    backendId === "agents-dotdir" &&
-    action === "preview" &&
+    backendId === "rulesync" &&
+    action === "status" &&
     status !== 0 &&
-    /\bWould (create|update|remove) \d+ item\(s\):/.test(output)
+    /\b(?:not up to date|out of date)\b/i.test(output)
   );
 }
 

@@ -12,5 +12,5 @@ hooks:
   auto-sync-on-start:
     logicalEvent: session_start
     description: "On session start, fan already-canonical capabilities out to all hosts in the background."
-    enabled: true
+    enabled: false
 

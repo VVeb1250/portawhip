@@ -10,26 +10,23 @@ import { CONFIG_SYNC_BACKENDS, backendById, normalizeBackendId, runBackend } fro
 const VALID_ACTIONS = new Set(["status", "preview", "apply"]);
 const VALID_SCOPES = new Set(["all", "project", "global"]);
 const PROFILES = {
-  "ai-project-instructions": {
-    backends: ["ai-config-sync"],
+  "project-instructions": {
+    backends: ["rulesync"],
     scope: "project",
     include: "instructions",
   },
-  "ai-global-instructions": {
-    backends: ["ai-config-sync"],
+  "global-instructions": {
+    backends: ["rulesync"],
     scope: "global",
     include: "instructions",
   },
-  "ai-project-mcp": {
-    backends: ["ai-config-sync"],
+  "project-mcp": {
+    backends: ["rulesync"],
     scope: "project",
     include: "mcp",
   },
   "asm-status": {
     backends: ["agent-skill-manager"],
-  },
-  "agents-check": {
-    backends: ["agents-dotdir"],
   },
 };
 
@@ -43,7 +40,7 @@ function parseCsv(value) {
 export function parseArgs(argv) {
   const args = {
     action: argv[2] ?? "status",
-    backends: ["ai-config-sync"],
+    backends: ["rulesync"],
     json: false,
     allowApply: false,
     allowNpx: false,
@@ -106,7 +103,11 @@ export function parseArgs(argv) {
   if (args.action === "apply" && !args.allowApply) {
     throw new Error("apply requires an explicit --apply flag; run preview first");
   }
-  if (args.action === "apply") validateApplySafety(args);
+  if (args.action === "apply") {
+    throw new Error(
+      "direct apply is retired; use `portawhip sync apply --scope <scope> --apply` for backup, rollback, and ownership checks",
+    );
+  }
   args.backends = args.backends.map(normalizeBackendId);
   for (const backend of args.backends) backendById(backend);
   return args;
@@ -120,16 +121,6 @@ function applyProfile(args) {
   args.scope = profile.scope ?? args.scope;
   args.include = profile.include ?? args.include;
   args.exclude = profile.exclude ?? args.exclude;
-}
-
-function validateApplySafety(args) {
-  if (!args.include) {
-    throw new Error("apply requires --include or a --profile; broad all-area apply is blocked");
-  }
-  const selectors = parseCsv(args.include);
-  if (selectors.some((selector) => selector === "skills")) {
-    throw new Error("apply of all skills is blocked; use item selectors like --include skills:pdf");
-  }
 }
 
 function optionsFromArgs(args) {
@@ -146,7 +137,7 @@ function optionsFromArgs(args) {
 
 export function collectSyncConfig({
   action = "status",
-  backends = ["ai-config-sync"],
+  backends = ["rulesync"],
   options = {},
   runner = null,
 } = {}) {

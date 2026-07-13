@@ -28,12 +28,19 @@ test("runAutoSync: disabled config skips without touching fan-out", async () => 
   assert.equal(called, false);
 });
 
+test("runAutoSync: automation is fail-closed until explicitly enabled", async () => {
+  let called = false;
+  const res = await runAutoSync({ config: {}, fanOutImpl: () => (called = true) });
+  assert.deepEqual(res, { skipped: "disabled" });
+  assert.equal(called, false);
+});
+
 // The enabled path acquires a real lock + writes real state under ROOT/
 // .hp-state, so it is verified live (docs/archive/phaseS1c-verify.md) rather than in
 // a unit test that would pollute/contend on that shared state.
 
-test("loadConfig: autoSync defaults on with a 60m throttle; overrides read", () => {
-  assert.deepEqual(loadConfig("does-not-exist.yaml").autoSync, { enabled: true, throttleMinutes: 60 });
+test("loadConfig: autoSync defaults off with a 60m throttle; overrides read", () => {
+  assert.deepEqual(loadConfig("does-not-exist.yaml").autoSync, { enabled: false, throttleMinutes: 60 });
   const dir = mkdtempSync(join(tmpdir(), "autosync-cfg-"));
   const path = join(dir, "router.config.yaml");
   writeFileSync(path, "autoSync:\n  enabled: false\n  throttleMinutes: 5\n");

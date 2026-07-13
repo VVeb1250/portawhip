@@ -103,6 +103,9 @@ export function applyTarget(command, target) {
 }
 
 export async function collectConnectorLinks({ command = "status", scope = "project" } = {}) {
+  if (command !== "status") {
+    throw new Error("link-connectors is read-only; use portawhip sync apply so Rulesync owns the write");
+  }
   const hosts = await detectHosts();
   const hostIds = hosts.mcpHosts;
   const mcpLinks = await mcpLinkedByHost(hostIds);

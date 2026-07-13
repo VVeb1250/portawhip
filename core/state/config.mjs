@@ -58,13 +58,10 @@ const DEFAULTS = {
   // session before going silent (full line, then terse reminder, then
   // nothing). An assistant that reminds twice and then shuts up.
   pushMaxMentionsPerSession: 2,
-  // Auto-sync (Phase S1c, decision D): on session start, the hook
-  // fire-and-forgets scripts/auto-sync.mjs, which fans out already-canonical
-  // capabilities (recipe.yaml + recipes/imported.yaml + selected bundles) to
-  // all hosts. It does NOT auto-discover/import — import stays manual
-  // (`npm run import`). `enabled:false` disables the auto fan-out.
-  // throttleMinutes rate-limits it so rapid session restarts don't re-run it.
-  autoSync: { enabled: true, throttleMinutes: 60 },
+  // Auto-sync is gated off until manual project + fake-HOME global reconcile
+  // pass and host SessionStart hooks are live-probed. When explicitly enabled,
+  // it calls the same guarded reconciler and never auto-imports.
+  autoSync: { enabled: false, throttleMinutes: 60 },
 };
 
 export function loadConfig(path = "router.config.yaml") {

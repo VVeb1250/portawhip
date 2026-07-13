@@ -1,29 +1,19 @@
 #!/usr/bin/env node
 
-import { existsSync, readdirSync, statSync } from "node:fs";
-import { join, resolve } from "node:path";
-import spawnSync from "cross-spawn";
-import { activeSelectionPathFor, readActiveSelection, resolveRecipePaths } from "../../core/state/bundle-state.mjs";
+import { resolve } from "node:path";
+import { readActiveSelection, resolveRecipePaths } from "../../core/state/bundle-state.mjs";
 import { mergeRawEntries } from "../../core/registry/registry.mjs";
 import { detectHosts } from "../hosts.mjs";
 import { installEntries } from "../load.mjs";
-import { collectSurfaceLinks, presentHostSet } from "../link/link-surfaces.mjs";
+import { runReconcile } from "./reconcile.mjs";
 
-const VALID_COMMANDS = new Set(["sync", "check", "watch"]);
-const INSTALL_TYPES = new Set(["cli", "skill"]);
-
-function localBin(root, name) {
-  const suffix = process.platform === "win32" ? ".cmd" : "";
-  const candidate = join(root, "node_modules", ".bin", `${name}${suffix}`);
-  return existsSync(candidate) ? candidate : name;
-}
+const VALID_COMMANDS = new Set(["sync", "check"]);
+const INSTALL_TYPES = new Set(["cli"]);
 
 export function parseArgs(argv) {
   const args = {
     command: argv[2] ?? "sync",
     scope: "project",
-    intervalMs: 1200,
-    once: false,
     json: false,
   };
 
@@ -32,11 +22,6 @@ export function parseArgs(argv) {
     if (arg === "--scope") {
       args.scope = argv[i + 1];
       i += 1;
-    } else if (arg === "--interval") {
-      args.intervalMs = Number(argv[i + 1]);
-      i += 1;
-    } else if (arg === "--once") {
-      args.once = true;
     } else if (arg === "--json") {
       args.json = true;
     } else {
@@ -45,10 +30,9 @@ export function parseArgs(argv) {
   }
 
   if (!VALID_COMMANDS.has(args.command)) {
-    throw new Error("usage: sync-surfaces.mjs <sync|check|watch> [--scope project|global] [--interval ms] [--once] [--json]");
+    throw new Error("usage: sync-surfaces.mjs <sync|check> [--scope project|global] [--json]");
   }
   if (!["project", "global"].includes(args.scope)) throw new Error(`invalid scope "${args.scope}"`);
-  if (!Number.isFinite(args.intervalMs) || args.intervalMs <= 0) throw new Error("invalid --interval");
   return args;
 }
 
@@ -64,12 +48,7 @@ function recipeEntries(root) {
   };
 }
 
-function run(command, args, { cwd }) {
-  const result = spawnSync.sync(command, args, { cwd, stdio: "inherit" });
-  return result.status === 0;
-}
-
-export async function syncSurfaces({ root = resolve("."), scope = "project", check = false, runner = run, hosts = null } = {}) {
+export async function syncSurfaces({ root = resolve("."), scope = "project", check = false, reconciler = runReconcile, hosts = null } = {}) {
   const absoluteRoot = resolve(root);
   const { recipePaths, entries } = recipeEntries(absoluteRoot);
   const installEntriesForSync = installableEntries(entries);
@@ -80,94 +59,43 @@ export async function syncSurfaces({ root = resolve("."), scope = "project", che
     lanes: [],
   };
 
-  const agentsArgs = ["sync", "--verbose"];
-  if (check) agentsArgs.push("--check");
-  const mcpOk = runner(localBin(absoluteRoot, "agents"), agentsArgs, { cwd: absoluteRoot });
+  const reconcile = await reconciler({
+    command: check ? "check" : "apply",
+    scope,
+    root: absoluteRoot,
+    allowApply: !check,
+  });
   result.lanes.push({
-    lane: "mcp",
-    backend: "agents",
-    ok: mcpOk,
+    lane: "fan-out",
+    backend: "rulesync via reconciler",
+    ok: reconcile.status === "success",
     action: check ? "check" : "sync",
+    reconcile,
   });
 
   if (check) {
     result.lanes.push({
-      lane: "cli+skills",
-      backend: "mise+agent-skill-manager",
+      lane: "cli",
+      backend: "mise",
       ok: true,
       action: "planned",
       count: installEntriesForSync.length,
     });
-    const surfacePlan = collectSurfaceLinks({ command: "status", scope, root: absoluteRoot, presentHosts: await presentHostSet() });
-    result.lanes.push(surfaceLane(surfacePlan, "planned"));
     return result;
   }
 
   const detectedHosts = hosts ?? (await detectHosts());
   const installResults = installEntries(installEntriesForSync, detectedHosts, scope);
   result.lanes.push({
-    lane: "cli+skills",
-    backend: "mise+agent-skill-manager",
+    lane: "cli",
+    backend: "mise",
     ok: installResults.every((item) => item.ok),
     action: "sync",
     count: installResults.length,
     results: installResults,
   });
 
-  // Commands + agents: mise/asm don't install these, so fan them out by
-  // managed-copy into each markdown-host's native dir (Phase S2 write).
-  const surfaceResult = collectSurfaceLinks({ command: "install", scope, root: absoluteRoot, presentHosts: await presentHostSet() });
-  result.lanes.push(surfaceLane(surfaceResult, "sync"));
   return result;
-}
-
-// A copy target only "fails" if it errored; source/unsupported/linked/missing
-// are all expected, non-failing states.
-function surfaceLane(plan, action) {
-  const copied = plan.rows.filter((r) => r.changed).length;
-  const unsupported = plan.rows.filter((r) => r.status === "unsupported").length;
-  return {
-    lane: "commands+agents",
-    backend: "link-surfaces (managed-copy)",
-    ok: plan.rows.every((r) => r.status !== "error"),
-    action,
-    count: plan.rows.length,
-    copied,
-    unsupported,
-  };
-}
-
-function sourceFiles(root) {
-  const files = [
-    join(root, ".agents", "agents.json"),
-    join(root, ".agents", "local.json"),
-    join(root, "recipe.yaml"),
-    activeSelectionPathFor(root),
-  ];
-  const dirs = [join(root, ".agents", "skills"), join(root, "recipes")];
-  for (const dir of dirs) collectFiles(dir, files);
-  return files.filter(existsSync);
-}
-
-function collectFiles(path, files) {
-  if (!existsSync(path)) return;
-  const stat = statSync(path);
-  if (stat.isFile()) {
-    files.push(path);
-    return;
-  }
-  if (!stat.isDirectory()) return;
-  for (const child of readdirSync(path)) collectFiles(join(path, child), files);
-}
-
-function fingerprint(root) {
-  return sourceFiles(root)
-    .sort()
-    .map((path) => {
-      const stat = statSync(path);
-      return `${path}:${stat.mtimeMs}:${stat.size}`;
-    })
-    .join("|");
 }
 
 function printResult(result, json = false) {
@@ -182,37 +110,9 @@ function printResult(result, json = false) {
   }
 }
 
-async function runWatch({ root, scope, intervalMs, once, json }) {
-  let last = fingerprint(root);
-  let syncing = false;
-  const runOne = async () => {
-    if (syncing) return;
-    syncing = true;
-    try {
-      printResult(await syncSurfaces({ root, scope }), json);
-    } finally {
-      syncing = false;
-    }
-  };
-
-  await runOne();
-  if (once) return;
-  console.log(`watching surface sources every ${intervalMs}ms`);
-  setInterval(async () => {
-    const next = fingerprint(root);
-    if (next === last) return;
-    last = next;
-    await runOne();
-  }, intervalMs);
-}
-
 async function main() {
   const args = parseArgs(process.argv);
   const root = resolve(".");
-  if (args.command === "watch") {
-    await runWatch({ root, scope: args.scope, intervalMs: args.intervalMs, once: args.once, json: args.json });
-    return;
-  }
   const result = await syncSurfaces({ root, scope: args.scope, check: args.command === "check" });
   printResult(result, args.json);
   process.exitCode = result.lanes.every((lane) => lane.ok) ? 0 : 1;

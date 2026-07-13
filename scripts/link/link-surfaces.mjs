@@ -98,6 +98,9 @@ export function collectSurfaceLinks({
   entries = null,
   presentHosts = null,
 } = {}) {
+  if (command !== "status") {
+    throw new Error("link-surfaces is inventory-only; use portawhip sync apply so Rulesync owns command and agent writes");
+  }
   const surfaceEntries =
     entries ??
     canonicalSurfaceEntries(

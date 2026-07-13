@@ -5,6 +5,8 @@
 
 import spawnSync from "cross-spawn";
 import { collectSurfaceMatrix } from "../core/surface/surface-matrix.mjs";
+import { CONFIG_SYNC_BACKENDS } from "../core/surface/config-sync-backends.mjs";
+import { steadyStateWriterInvariant } from "../core/surface/writer-invariant.mjs";
 
 function parseArgs(argv) {
   return { json: argv.includes("--json"), heavy: argv.includes("--heavy") };
@@ -35,6 +37,15 @@ function checkCli() {
 function checkSkill() {
   const r = capture("npx", ["--yes", "agent-skill-manager", "inspect", "pdf", "--json"]);
   return { label: "pdf (skill via asm)", ok: r.ok };
+}
+
+function checkWriterInvariant() {
+  const result = steadyStateWriterInvariant(CONFIG_SYNC_BACKENDS);
+  return {
+    label: "fan-out writer invariant (exactly one: rulesync)",
+    ok: result.ok,
+    detail: `steady-state writers: ${result.writers.join(", ") || "(none)"}`,
+  };
 }
 
 // Router/hooks/connectors added later than the 3 checks above (Step 1) —
@@ -68,6 +79,7 @@ function checkConnectors(scope) {
 const { json, heavy } = parseArgs(process.argv.slice(2));
 
 const checks = [
+  checkWriterInvariant(),
   checkMcp(),
   checkCli(),
   checkSkill(),
@@ -109,9 +121,9 @@ if (matrix.summary.attention.length) {
 }
 
 console.log(
-  "\nNote: add-mcp / agent-skill-manager entries are managed by those tools, not by\n" +
-    "this harness. `doctor` reports on them but `scripts/uninstall-all.mjs` cannot\n" +
-    "remove them — use each tool's own uninstall if you want those gone too.",
+  "\nWriter policy: Rulesync is the sole MCP/instruction/skill/hook fan-out writer.\n" +
+    "add-mcp is discovery-only; agent-skill-manager is limited to long-tail skill hosts.\n" +
+    "Use `portawhip sync check|apply|verify`, not the legacy link scripts, for writes.",
 );
 
 process.exitCode = checks.every((c) => c.ok) ? 0 : 1;

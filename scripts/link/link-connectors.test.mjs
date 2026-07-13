@@ -3,7 +3,12 @@ import assert from "node:assert/strict";
 import { mkdtempSync, rmSync, readFileSync, writeFileSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { applyTarget } from "./link-connectors.mjs";
+import { applyTarget, collectConnectorLinks } from "./link-connectors.mjs";
+
+test("link-connectors: public collector is read-only", async () => {
+  await assert.rejects(() => collectConnectorLinks({ command: "install" }), /read-only.*Rulesync/i);
+  await assert.rejects(() => collectConnectorLinks({ command: "remove" }), /read-only.*Rulesync/i);
+});
 
 test("link-connectors: install writes the harness-router marker block", () => {
   const dir = mkdtempSync(join(tmpdir(), "harness-connectors-"));

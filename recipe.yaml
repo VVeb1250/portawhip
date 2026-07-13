@@ -1,8 +1,6 @@
-# Step 1 proof-of-concept recipe.
-# Each entry declares WHAT capability to load, not HOW — the dispatcher
-# picks the backend per `type` and shells out to a tool that already
-# solves that backend well (add-mcp / mise / asm). No install logic
-# lives in this repo.
+# Each entry declares WHAT capability to load. MCP entries are staged in
+# `.rulesync/mcp.json`; Rulesync is the only host-config writer. mise owns CLI
+# tools, while agent-skill-manager is reserved for long-tail skill hosts.
 - id: context7
   type: mcp
   source: https://mcp.context7.com/mcp
@@ -85,7 +83,7 @@
   # like the other instruction-backed skills below.
   type: skill
   source: portawhip
-  path: skills/portawhip
+  path: .rulesync/skills/portawhip
   install: false
   route:
     triggers:
@@ -127,9 +125,9 @@
     inject: hint
     action: read_skill
 
-- id: ai-config-sync-manager
+- id: rulesync
   type: config-sync
-  source: ai-config-sync
+  source: rulesync
   install: false
   route:
     triggers:
@@ -143,7 +141,7 @@
         "sync hooks permissions",
         "claude codex drift",
       ]
-    description: "Bidirectional Claude Code/Codex config sync via ai-config-sync-manager"
+    description: "Sole steady-state fan-out writer for project and global host configuration"
     when: [user_prompt]
     inject: hint
     action: run_sync_config
@@ -161,29 +159,10 @@
         "skills installed across hosts",
         "sync skills",
       ]
-    description: "Probe agent-skill-manager provider state used by the skill install backend"
+    description: "Probe or install skills only for long-tail hosts rulesync cannot target"
     when: [user_prompt]
     inject: hint
     action: run_sync_config_status
-
-- id: agents-dotdir-sync
-  type: config-sync
-  source: agents
-  install: false
-  route:
-    triggers:
-      [
-        ".agents",
-        "agents sync",
-        "agents status",
-        "single source of truth",
-        "sync all hosts",
-        "sync codex claude gemini cursor",
-      ]
-    description: "Probe or run @agents-dev/cli .agents source-of-truth sync across many hosts"
-    when: [user_prompt]
-    inject: hint
-    action: run_sync_config
 
 - id: configure-ecc
   type: skill

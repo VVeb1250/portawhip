@@ -1,15 +1,17 @@
 #!/usr/bin/env node
-// Step 1 proof: one declarative recipe, dispatched to whichever backend
-// already solves that capability type well. This file owns NO install
-// logic and no host list — it only shells out to add-mcp / mise / asm
-// per entry.type, targeting whatever detectHosts() finds on THIS machine.
+// Declarative recipe loader. MCP declarations are staged in Rulesync's
+// canonical source (never written to hosts through add-mcp); mise owns CLI
+// tools, and ASM is limited to long-tail skill hosts Rulesync cannot target.
 
-import { existsSync } from "node:fs";
-import { resolve } from "node:path";
+import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { dirname, join, resolve } from "node:path";
+import { isDeepStrictEqual } from "node:util";
 import spawnSync from "cross-spawn";
 import { detectHosts } from "./hosts.mjs";
 import { mergeRawEntries } from "../core/registry/registry.mjs";
 import { readActiveSelection, resolveRecipePaths } from "../core/state/bundle-state.mjs";
+import { canonicalRootForScope, normalizeMcpConfig } from "../core/surface/rulesync-canonical.mjs";
 
 function run(cmd, args) {
   console.log(`\n$ ${cmd} ${args.join(" ")}`);
@@ -17,47 +19,58 @@ function run(cmd, args) {
   return result.status === 0;
 }
 
-function slugify(label) {
-  return label.trim().toLowerCase().replace(/\s+/g, "-");
+export function stageMcpEntry(entry, { root = resolve("."), scope = entry.scope ?? "global", home = homedir() } = {}) {
+  const source = String(entry.source ?? "");
+  const input = /^https?:\/\//i.test(source)
+    ? { url: source, headers: entry.headers }
+    : Array.isArray(entry.args)
+      ? {
+          command: source,
+          args: entry.args.map((arg) => {
+            const candidate = resolve(root, arg);
+            return existsSync(candidate) ? candidate : arg;
+          }),
+          env: entry.env,
+        }
+      : null;
+  const normalized = normalizeMcpConfig(input ?? {});
+  if (!normalized.config) {
+    throw new Error(`${entry.id}: no portable launch config; import its installed config with npm run sync:seed`);
+  }
+
+  const canonicalRoot = canonicalRootForScope({ root, scope, home });
+  const path = join(canonicalRoot, ".rulesync", "mcp.json");
+  const json = existsSync(path)
+    ? JSON.parse(readFileSync(path, "utf8"))
+    : {
+        $schema: "https://github.com/dyoshikawa/rulesync/releases/download/v9.6.3/mcp-schema.json",
+        mcpServers: {},
+      };
+  json.mcpServers ??= {};
+  const name = entry.name ?? entry.id;
+  const current = json.mcpServers[name];
+  if (current && !isDeepStrictEqual(current, normalized.config)) {
+    throw new Error(`${name}: declaration conflicts with canonical Rulesync MCP config`);
+  }
+  if (current) return { status: "no-op", path, name, warnings: normalized.warnings };
+
+  json.mcpServers[name] = normalized.config;
+  mkdirSync(dirname(path), { recursive: true });
+  const temporary = `${path}.${process.pid}.tmp`;
+  writeFileSync(temporary, `${JSON.stringify(json, null, 2)}\n`);
+  renameSync(temporary, path);
+  return { status: "changed", path, name, warnings: normalized.warnings };
 }
 
-function loadMcp(entry, hosts) {
-  if (hosts.mcpHosts.length === 0) {
-    console.log(`skip ${entry.id}: no MCP-capable agent detected on this machine`);
+function loadMcp(entry, hosts, scope) {
+  try {
+    const result = stageMcpEntry(entry, { root: resolve("."), scope: entry.scope ?? scope });
+    console.log(`${result.status} ${entry.id}: staged in ${result.path}; run portawhip sync apply to fan out`);
     return true;
+  } catch (error) {
+    console.error(error.message);
+    return false;
   }
-  // add-mcp fails the WHOLE batch if any target lacks transport support for
-  // this entry (e.g. Claude Desktop only takes stdio, not remote/http). It
-  // names the incompatible host in its own error text, so read that instead
-  // of hardcoding a per-host transport capability matrix ourselves.
-  let candidates = [...hosts.mcpHosts];
-  for (let attempt = 0; attempt < candidates.length; attempt += 1) {
-    const args = ["--yes", "add-mcp", entry.source, "-y"];
-    if (entry.scope !== "project") args.push("-g");
-    if (entry.name) args.push("-n", entry.name);
-    // add-mcp can silently upgrade project-scoped entries to global if any
-    // target host requires it (observed: VS Code / Copilot CLI force this).
-    // A relative path only resolves correctly from this repo's own cwd, so
-    // any local file argument must be made absolute regardless of scope.
-    for (const a of entry.args ?? []) {
-      args.push("--args", existsSync(a) ? resolve(a) : a);
-    }
-    for (const host of candidates) args.push("-a", host);
-    console.log(`\n$ npx ${args.join(" ")}`);
-    const result = spawnSync.sync("npx", args, { encoding: "utf8" });
-    const text = (result.stdout || "") + (result.stderr || "");
-    console.log(text);
-    if (result.status === 0) return true;
-
-    const match = text.match(/don't support .*transport:\s*([^\n]+)/i);
-    if (!match) return false; // some other failure — don't loop blindly
-    const excluded = new Set(match[1].split(",").map((s) => slugify(s)));
-    const next = candidates.filter((id) => !excluded.has(id));
-    if (next.length === candidates.length || next.length === 0) return false;
-    console.log(`retrying without incompatible host(s): ${[...excluded].join(", ")}`);
-    candidates = next;
-  }
-  return false;
 }
 
 function loadCli(entry, hosts, scope) {
@@ -70,13 +83,20 @@ function loadCli(entry, hosts, scope) {
   return run("mise", args);
 }
 
+const ASM_LONG_TAIL_PROVIDERS = new Set(["gemini", "windsurf", "antigravity"]);
+
+export function longTailSkillHosts(skillHosts) {
+  return skillHosts.filter((provider) => ASM_LONG_TAIL_PROVIDERS.has(provider));
+}
+
 function loadSkill(entry, hosts) {
-  if (hosts.skillHosts.length === 0) {
-    console.log(`skip ${entry.id}: no skill-capable agent detected on this machine`);
+  const providers = longTailSkillHosts(hosts.skillHosts);
+  if (providers.length === 0) {
+    console.log(`skip ${entry.id}: Rulesync owns detected skill hosts; ASM is reserved for long-tail hosts`);
     return true;
   }
   let ok = true;
-  for (const provider of hosts.skillHosts) {
+  for (const provider of providers) {
     const args = ["--yes", "agent-skill-manager", "install", entry.source];
     if (entry.path) args.push("--path", entry.path);
     args.push("-p", provider, "--yes");

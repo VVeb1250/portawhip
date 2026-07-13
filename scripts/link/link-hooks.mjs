@@ -187,6 +187,9 @@ function applyTarget(command, hostId, target) {
 }
 
 export async function collectHookLinks({ command = "status", scope = "project" } = {}) {
+  if (command !== "status") {
+    throw new Error("link-hooks is read-only; use portawhip sync apply so Rulesync owns the write");
+  }
   const hosts = await detectHosts();
   const hostIds = hosts.mcpHosts;
   const rows = [];

@@ -2,9 +2,10 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   computeCandidates,
+  collectMcpConfigs,
   groupByType,
   isBare,
-  mergeAgentsMcp,
+  mergeRulesyncMcp,
   mergeImported,
   parseArgs,
   toRecipeEntry,
@@ -86,21 +87,33 @@ test("mergeImported: existing wins on id, so re-apply is idempotent", () => {
   assert.equal(merged.find((e) => e.id === "rg").note, "kept");
 });
 
-test("mergeAgentsMcp: adds stdio server with config, skips one with no recoverable config", () => {
-  const agents = { schemaVersion: 3, mcp: { servers: { existing: {} } } };
+test("mergeRulesyncMcp: adds stdio server with config, skips one with no recoverable config", () => {
+  const canonical = { mcpServers: { existing: {} } };
   const entries = [disc("withcfg", "mcp"), disc("nocfg", "mcp"), disc("existing", "mcp")];
   const configs = { withcfg: { command: "node", args: ["x.js"] } };
-  const { json, added } = mergeAgentsMcp(agents, entries, configs);
+  const { json, added } = mergeRulesyncMcp(canonical, entries, configs);
   assert.deepEqual(added, ["withcfg"]);
-  assert.equal(json.mcp.servers.withcfg.transport, "stdio");
-  assert.equal(json.mcp.servers.withcfg.command, "node");
-  assert.ok(!json.mcp.servers.nocfg, "no-config server is not written");
-  assert.ok(json.mcp.servers.existing, "pre-existing server untouched");
+  assert.equal(json.mcpServers.withcfg.type, "stdio");
+  assert.equal(json.mcpServers.withcfg.command, "node");
+  assert.ok(!json.mcpServers.nocfg, "no-config server is not written");
+  assert.ok(json.mcpServers.existing, "pre-existing server untouched");
 });
 
-test("mergeAgentsMcp: http transport when config has url", () => {
-  const { json, added } = mergeAgentsMcp(null, [disc("remote", "mcp")], { remote: { url: "https://x/y" } });
+test("mergeRulesyncMcp: http transport when config has url", () => {
+  const { json, added } = mergeRulesyncMcp(null, [disc("remote", "mcp")], { remote: { url: "https://x/y" } });
   assert.deepEqual(added, ["remote"]);
-  assert.equal(json.mcp.servers.remote.transport, "http");
-  assert.equal(json.mcp.servers.remote.url, "https://x/y");
+  assert.equal(json.mcpServers.remote.type, "http");
+  assert.equal(json.mcpServers.remote.url, "https://x/y");
+});
+
+test("collectMcpConfigs: blocks conflicting host variants instead of picking the first", () => {
+  const result = collectMcpConfigs(["shared"], [
+    { agentType: "claude", servers: [{ serverName: "shared", config: { command: "shared", args: ["mcp"] } }] },
+    {
+      agentType: "codex",
+      servers: [{ serverName: "shared", config: { command: "shared", args: ["mcp"], env: { WORKERS: "8" } } }],
+    },
+  ]);
+  assert.deepEqual(result.configs, {});
+  assert.deepEqual(result.conflicts, [{ name: "shared", hosts: ["claude", "codex"] }]);
 });
