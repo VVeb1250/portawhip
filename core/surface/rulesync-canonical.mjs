@@ -106,12 +106,36 @@ export async function seedMcpCanonical({
     });
   const installed = await listInstalledServers({ global: scope === "global", cwd: resolve(root) });
   const union = unionMcpServers(installed);
+  // A project-bound server (repo-relative launch path) is meaningless in the
+  // user's global config, so it can never be fanned out globally. Drop it from
+  // the global canonical — including from the conflict list, so a per-host path
+  // difference on a project server never blocks the global seed. Scope is
+  // DERIVED from the config, never a hand-kept list, so user-loaded tools flow
+  // through the same rule. Project scope keeps everything (host-native merge
+  // handles inheritance of anything also declared globally).
+  const excluded = [];
+  if (scope === "global") {
+    const projectBound = new Set();
+    for (const host of installed) {
+      for (const server of host.servers ?? []) {
+        const normalized = normalizeMcpConfig(server.config);
+        if (normalized.config && configIsProjectBound(normalized.config, resolve(root))) {
+          projectBound.add(server.serverName);
+        }
+      }
+    }
+    for (const name of projectBound) {
+      if (name in union.servers) delete union.servers[name];
+      excluded.push({ name, reason: "project-bound path — project scope only" });
+    }
+    union.conflicts = union.conflicts.filter((conflict) => !projectBound.has(conflict.name));
+  }
   const canonicalRoot = canonicalRootForScope({ root, scope, home });
   const path = join(canonicalRoot, ".rulesync", "mcp.json");
   if (union.conflicts.length > 0) {
-    return { status: "blocked", scope, path, ...union, count: Object.keys(union.servers).length };
+    return { status: "blocked", scope, path, excluded, ...union, count: Object.keys(union.servers).length };
   }
-  if (!apply) return { status: "preview", scope, path, ...union, count: Object.keys(union.servers).length };
+  if (!apply) return { status: "preview", scope, path, excluded, ...union, count: Object.keys(union.servers).length };
   mkdirSync(dirname(path), { recursive: true });
   const payload = {
     $schema: "https://github.com/dyoshikawa/rulesync/releases/download/v9.6.3/mcp-schema.json",
@@ -120,8 +144,9 @@ export async function seedMcpCanonical({
   const temporary = `${path}.${process.pid}.tmp`;
   writeFileSync(temporary, `${JSON.stringify(payload, null, 2)}\n`);
   renameSync(temporary, path);
-  return { status: "success", scope, path, ...union, count: Object.keys(union.servers).length };
+  return { status: "success", scope, path, excluded, ...union, count: Object.keys(union.servers).length };
 }
 import { mkdirSync, renameSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
+import { configIsProjectBound } from "./scope-derive.mjs";

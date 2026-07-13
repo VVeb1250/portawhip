@@ -80,3 +80,32 @@ test("rulesync canonical: migration previews before atomically seeding the MCP u
     url: "https://example.test/mcp",
   });
 });
+
+test("rulesync canonical: global seed excludes project-bound servers (derived, not listed)", async () => {
+  const root = mkdtempSync(join(tmpdir(), "rulesync-scope-"));
+  // harness-router-style server: repo-relative launch path across hosts with
+  // differing configs (would otherwise be a blocking global conflict).
+  const discover = async () => [
+    {
+      agentType: "codex",
+      servers: [
+        { serverName: "harness-router", config: { command: "node", args: [`${root}/server/mcp-server.mjs`] } },
+        { serverName: "docs", config: { url: "https://example.test/mcp" } },
+      ],
+    },
+    {
+      agentType: "claude-code",
+      servers: [
+        { serverName: "harness-router", config: { command: "node", args: ["server/mcp-server.mjs"] } },
+        { serverName: "docs", config: { type: "http", url: "https://example.test/mcp" } },
+      ],
+    },
+  ];
+  const result = await seedMcpCanonical({ root, scope: "global", discover, apply: false });
+  // project-bound server dropped from global (and not counted as a conflict)
+  assert.equal("harness-router" in result.servers, false);
+  assert.ok(result.excluded.some((e) => e.name === "harness-router"));
+  assert.equal(result.status, "preview");
+  // portable server survives at global scope
+  assert.deepEqual(result.servers.docs, { type: "http", url: "https://example.test/mcp" });
+});
