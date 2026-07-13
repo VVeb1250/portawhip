@@ -1,0 +1,29 @@
+{
+  "$schema": "https://github.com/dyoshikawa/rulesync/releases/download/v9.6.3/config-schema.json",
+  "targets": [
+    "claudecode",
+    "codexcli",
+    "cursor",
+    "copilot",
+    "cline",
+    "opencode",
+    "goose",
+    "amp",
+    "pi",
+    "qwencode",
+    "zed",
+    "junie"
+  ],
+  "features": ["rules", "ignore", "mcp", "commands", "subagents", "skills", "hooks", "permissions"],
+  "outputRoots": [
+    "."
+  ],
+  "delete": false,
+  "verbose": false,
+  "silent": false,
+  "global": false,
+  "simulateCommands": false,
+  "simulateSubagents": false,
+  "simulateSkills": false,
+  "gitignoreTargetsOnly": true
+}

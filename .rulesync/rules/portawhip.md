@@ -1,3 +1,10 @@
+---
+root: true
+targets: ["*"]
+description: "Portawhip project agent instructions"
+globs: ["**/*"]
+---
+
 <!-- harness-router:start -->
 Before starting a task, call `route(task summary)` on the harness-router MCP
 server and follow any returned pointers. State only the positively requested action
