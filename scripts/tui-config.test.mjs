@@ -5,8 +5,10 @@ import { fileURLToPath } from "node:url";
 
 import {
   CONFIG_SCOPES,
+  appendConfigInput,
   collectConfigRows,
   draftForRow,
+  nextChoiceDraft,
   runConfigWrite,
 } from "./tui-config.mjs";
 
@@ -61,6 +63,27 @@ test("TUI config writes delegate to the validated config command", () => {
   ]);
 });
 
+test("boolean and enum drafts cycle through valid choices without typing", () => {
+  assert.equal(nextChoiceDraft("denseEnabled", "true", 1), "false");
+  assert.equal(nextChoiceDraft("denseEnabled", "false", -1), "true");
+  assert.equal(nextChoiceDraft("engine", "hybrid", 1), "keyword");
+  assert.equal(nextChoiceDraft("engine", "keyword", -1), "hybrid");
+});
+
+test("numeric drafts accept only their numeric format", () => {
+  assert.equal(appendConfigInput("k", "1", "2"), "12");
+  assert.equal(appendConfigInput("k", "1", "."), "1");
+  assert.equal(appendConfigInput("k", "1", "x"), "1");
+
+  assert.equal(appendConfigInput("denseThreshold", "0", "."), "0.");
+  assert.equal(appendConfigInput("denseThreshold", "0.", "5"), "0.5");
+  assert.equal(appendConfigInput("denseThreshold", "0.5", "."), "0.5");
+  assert.equal(appendConfigInput("denseThreshold", "0.5", "x"), "0.5");
+});
+
+test("free-text drafts still accept path characters", () => {
+  assert.equal(appendConfigInput("graphPath", "graphs", "/custom.json"), "graphs/custom.json");
+});
 test("interactive TUI exposes a settings tab and its key map", () => {
   const path = fileURLToPath(new URL("./tui.mjs", import.meta.url));
   const source = readFileSync(path, "utf8");
