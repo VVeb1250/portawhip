@@ -12,6 +12,17 @@ export function formatConfigValue(value) {
   return typeof value === "object" ? JSON.stringify(value) : String(value);
 }
 
+export function configInputHint(key) {
+  const definition = CONFIG_DEFINITIONS[key];
+  if (!definition) throw new Error("unknown config key " + JSON.stringify(key));
+  if (definition.type === "boolean") return "allowed: false | true";
+  if (definition.type === "enum") return "allowed: " + definition.values.join(" | ");
+  if (definition.min != null && definition.max != null) return "range: " + definition.min + " to " + definition.max;
+  if (definition.min != null) return "minimum: " + definition.min;
+  if (definition.max != null) return "maximum: " + definition.max;
+  return definition.type === "string" ? "non-empty text" : "numeric value";
+}
+
 export function collectConfigRows({ runner = runConfigCommand } = {}) {
   const effective = runner(["list", "--scope", "effective"]).config;
   const user = runner(["list", "--scope", "user"]).config;
@@ -23,6 +34,8 @@ export function collectConfigRows({ runner = runConfigCommand } = {}) {
     return {
       key,
       type: CONFIG_DEFINITIONS[key].type,
+      description: CONFIG_DEFINITIONS[key].description,
+      inputHint: configInputHint(key),
       effective: effectiveValue,
       user: userValue,
       project: projectValue,

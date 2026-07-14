@@ -10,6 +10,7 @@ import { collectSyncConfig } from "./sync/sync-config.mjs";
 import { runReconcile } from "./sync/reconcile.mjs";
 import { LINK_SCOPES, linkActionNeedsConfirmation, linkCommandForInput, runLinkAction } from "./tui-actions.mjs";
 import { CONFIG_SCOPES, appendConfigInput, collectConfigRows, draftForRow, formatConfigValue, nextChoiceDraft, runConfigWrite, validateConfigDraft } from "./tui-config.mjs";
+import { selectionStyle } from "./tui-theme.mjs";
 
 const TABS = ["overview", "sync", "connectors", "hooks", "enrich", "capabilities", "settings"];
 const TAB_COPY = {
@@ -208,7 +209,7 @@ function Header({ tab, loading, enriching, syncing, linking }) {
       TABS.map((item, index) =>
         React.createElement(
           Text,
-          { key: item, inverse: item === tab, color: item === tab ? "black" : "white" },
+          { key: item, color: "white", ...selectionStyle(item === tab) },
           ` ${index + 1}:${item} `,
         ),
       ),
@@ -348,7 +349,7 @@ function ConnectorRows({ rows, selected, height, width }) {
       React.createElement(
         Box,
         { key: `${row.hostId}-${row.scope}-${row.path ?? "mcp"}` },
-        React.createElement(Text, { inverse: active }, active ? ">" : " "),
+        React.createElement(Text, { ...selectionStyle(active) }, active ? ">" : " "),
         React.createElement(Text, { bold: true }, ` ${row.hostId.padEnd(20)}`),
         React.createElement(Text, { color: "gray" }, `${row.scope.padEnd(8)}`),
         React.createElement(Text, { color: statusColor(row.mcpStatus) }, `mcp:${row.mcpStatus.padEnd(8)} `),
@@ -371,7 +372,7 @@ function HookRows({ rows, selected, height, width }) {
       React.createElement(
         Box,
         { key: `${row.hostId}-${row.scope}` },
-        React.createElement(Text, { inverse: active }, active ? ">" : " "),
+        React.createElement(Text, { ...selectionStyle(active) }, active ? ">" : " "),
         React.createElement(Text, { bold: true }, ` ${row.hostId.padEnd(20)}`),
         React.createElement(Text, { color: "gray" }, `${row.scope.padEnd(8)}`),
         React.createElement(Text, { color: statusColor(row.status) }, `${row.status.padEnd(12)} `),
@@ -393,7 +394,7 @@ function CapabilityRows({ rows, selected, height, width }) {
       React.createElement(
         Box,
         { key: `${row.type}-${row.id}` },
-        React.createElement(Text, { inverse: active }, active ? ">" : " "),
+        React.createElement(Text, { ...selectionStyle(active) }, active ? ">" : " "),
         React.createElement(Text, { bold: true }, ` ${row.id.slice(0, 28).padEnd(30)}`),
         React.createElement(Text, { color: "cyan" }, `${row.type.padEnd(8)}`),
         React.createElement(Text, { color: "gray" }, `${row.origin.padEnd(12)}`),
@@ -411,7 +412,7 @@ function EnrichRows({ rows, selected, height, width }) {
       React.createElement(
         Box,
         { key: `${row.type}-${row.id}` },
-        React.createElement(Text, { inverse: active }, active ? ">" : " "),
+        React.createElement(Text, { ...selectionStyle(active) }, active ? ">" : " "),
         React.createElement(Text, { bold: true }, ` ${row.id.slice(0, 26).padEnd(28)}`),
         React.createElement(Text, { color: "cyan" }, `${row.type.padEnd(6)}`),
         React.createElement(Text, { color: statusColor(row.status) }, `${row.status.padEnd(10)} `),
@@ -430,7 +431,7 @@ function SyncRows({ rows, selected, height, width }) {
       React.createElement(
         Box,
         { key: `${row.backend}-${row.action}` },
-        React.createElement(Text, { inverse: active }, active ? ">" : " "),
+        React.createElement(Text, { ...selectionStyle(active) }, active ? ">" : " "),
         React.createElement(Text, { bold: true }, ` ${row.backend.slice(0, 22).padEnd(24)}`),
         React.createElement(Text, { color: statusColor(row.status) }, `${row.status.padEnd(11)} `),
         React.createElement(Text, { color: "cyan" }, `${row.action.padEnd(8)} `),
@@ -449,7 +450,7 @@ function ConfigRows({ rows, selected, height, width, scope }) {
       return React.createElement(
         Box,
         { key: row.key },
-        React.createElement(Text, { inverse: active }, active ? ">" : " "),
+        React.createElement(Text, { ...selectionStyle(active) }, active ? ">" : " "),
         React.createElement(Text, { bold: true }, " " + row.key.slice(0, 30).padEnd(32)),
         React.createElement(Text, { color: "cyan" }, row.type.padEnd(9)),
         React.createElement(Text, { color: "gray" }, "effective:"),
@@ -461,7 +462,7 @@ function ConfigRows({ rows, selected, height, width, scope }) {
   });
 }
 
-function ConfigControls({ scope, edit, armedAction }) {
+function ConfigControls({ scope, row, edit, armedAction }) {
   const editHint =
     edit?.type === "boolean" || edit?.type === "enum"
       ? "left/right or space to choose; enter validates"
@@ -488,12 +489,20 @@ function ConfigControls({ scope, edit, armedAction }) {
       React.createElement(Text, { color: "gray" }, "  writes "),
       React.createElement(Text, null, "confirmed " + scope + " overrides only"),
     ),
+    row
+      ? React.createElement(
+          Text,
+          { wrap: "truncate-end" },
+          React.createElement(Text, { color: "cyan", bold: true }, row.key),
+          React.createElement(Text, { color: "gray" }, " - " + row.description + " (" + row.inputHint + ")"),
+        )
+      : null,
     edit
       ? React.createElement(
           Text,
           null,
           React.createElement(Text, { color: "gray" }, edit.key + " = "),
-          React.createElement(Text, { inverse: true }, edit.value || " "),
+          React.createElement(Text, { ...selectionStyle(true) }, edit.value || " "),
           React.createElement(Text, { color: edit.armed ? "yellow" : "gray" }, "  " + writeHint),
         )
       : React.createElement(Text, { color: armedAction ? "yellow" : "gray" }, writeHint),
@@ -945,7 +954,7 @@ function App() {
       ? React.createElement(LinkControls, { tab, scope: linkScope, action: linkAction, armedAction: armedLinkAction })
       : null,
     tab === "settings"
-      ? React.createElement(ConfigControls, { scope: configScope, edit: configEdit, armedAction: armedConfigAction })
+      ? React.createElement(ConfigControls, { scope: configScope, row: rows[selected], edit: configEdit, armedAction: armedConfigAction })
       : null,
     tab !== "overview" && rows.length === 0 ? React.createElement(EmptyState, { tab }) : null,
     tab === "sync" && rows.length > 0
