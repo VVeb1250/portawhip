@@ -13,3 +13,9 @@ test("portawhip CLI keeps the TUI as the no-argument default", () => {
   assert.match(command.script.replace(/\\/g, "/"), /scripts\/tui\.mjs$/);
   assert.deepEqual(command.args, []);
 });
+
+test("portawhip CLI dispatches config management", () => {
+  const command = commandFor(["config", "set", "denseEnabled", "false"]);
+  assert.match(command.script.replace(/\\/g, "/"), /scripts\/config\.mjs$/);
+  assert.deepEqual(command.args, ["set", "denseEnabled", "false"]);
+});
