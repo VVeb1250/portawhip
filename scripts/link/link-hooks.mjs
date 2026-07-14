@@ -6,6 +6,7 @@ import { dirname, resolve } from "node:path";
 import { homedir } from "node:os";
 import { detectHosts } from "../hosts.mjs";
 import { HOOK_TARGETS, LOGICAL_HOOKS, LOGICAL_EVENT_TO_MANIFEST, hookTargetForHost } from "../../core/surface/hook-targets.mjs";
+import { claimOwnership, readOwnershipLedger, writeOwnershipLedger } from "../../core/surface/ownership-ledger.mjs";
 
 const VALID_COMMANDS = new Set(["status", "install", "remove"]);
 const VALID_SCOPES = new Set(["project", "global"]);
@@ -165,6 +166,29 @@ export const HarnessRouterPlugin = async () => ({
 `;
 }
 
+// The `hooks` key is link-hooks' own disjoint region inside a file rulesync
+// also writes (mcp/permissions/etc, `hooks` excluded from its features - see
+// rulesync.jsonc). The ownership ledger is whole-file-hash, not per-key, so a
+// legitimate write here must refresh rulesync's stored hash to the new
+// combined content - otherwise the next `sync check` reports false-positive
+// drift on every hooks install/remove forever. Writer stays "rulesync" (the
+// file's declared owner); this only updates its baseline, matching what
+// reconcile.mjs's own recordOwnership does after an apply.
+function refreshLedgerBaseline(target) {
+  if (target.kind !== "json-settings" || !existsSync(target.path)) return;
+  const ledgerPath = resolve(".hp-state", "ownership-ledger.json");
+  const key = (target.scope === "project" ? target.path : resolve(target.path)).replace(/\\/g, "/");
+  let ledger = readOwnershipLedger(ledgerPath);
+  if (!ledger.paths?.[key]) return; // not a rulesync-owned target - nothing to refresh
+  ledger = claimOwnership(ledger, {
+    path: key,
+    writer: ledger.paths[key].writer,
+    content: readFileSync(target.path),
+    scope: ledger.paths[key].scope,
+  });
+  writeOwnershipLedger(ledgerPath, ledger);
+}
+
 function applyTarget(command, hostId, target) {
   if (target.kind === "plugin-file") {
     if (command === "status") return { action: existsSync(target.path) ? "linked" : "missing" };
@@ -183,13 +207,18 @@ function applyTarget(command, hostId, target) {
     return { action: status.linked ? "linked" : "missing", details: status.details };
   }
   const changed = command === "install" ? installJsonHooks(hostId, target) : removeJsonHooks(target);
+  if (changed) refreshLedgerBaseline(target);
   return { action: changed ? "changed" : "no-op" };
 }
 
+// Hooks stay a link-hooks-owned lane, not a rulesync feature: live-tested
+// 2026-07-14, rulesync's "hooks" feature produces an empty output for
+// claudecode regardless of input schema (3 shapes tried) — undocumented and
+// non-functional for this target. rulesync.jsonc excludes "hooks" from its
+// features so it never touches the `hooks` key; this stays the sole writer
+// for that key, matching every other lane's write, surgically scoped to
+// entries carrying the universal-hook.mjs marker (see hasHook/removeHook).
 export async function collectHookLinks({ command = "status", scope = "project" } = {}) {
-  if (command !== "status") {
-    throw new Error("link-hooks is read-only; use portawhip sync apply so Rulesync owns the write");
-  }
   const hosts = await detectHosts();
   const hostIds = hosts.mcpHosts;
   const rows = [];

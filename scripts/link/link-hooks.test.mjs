@@ -12,11 +12,6 @@ after(() => rmSync(stubHome, { recursive: true, force: true }));
 
 const { collectHookLinks, installJsonHooks, removeJsonHooks, statusJsonHooks } = await import("./link-hooks.mjs");
 
-test("link-hooks: public collector is read-only", async () => {
-  await assert.rejects(() => collectHookLinks({ command: "install" }), /read-only.*Rulesync/i);
-  await assert.rejects(() => collectHookLinks({ command: "remove" }), /read-only.*Rulesync/i);
-});
-
 function fakeTarget(path, overrides = {}) {
   return {
     path,

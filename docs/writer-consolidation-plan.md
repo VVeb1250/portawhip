@@ -341,7 +341,64 @@ Decision is locked (Fork A, §1d gates all passed). This phase executes it.
 - **Acceptance:** two hosts starting near-simultaneously produce exactly one
   reconcile (lock proven), and it's the same reconciler as the manual path.
 
+**DONE (2026-07-14) — with two real findings along the way, not assumed:**
+The worker (`scripts/sync/auto-sync.mjs`: lock+throttle+log, calls
+`reconcile.mjs`) and the fire-and-forget SessionStart trigger
+(`adapters/hooks/universal-hook.mjs`) already existed from an earlier phase,
+but were dead: `router.config.yaml` had no `autoSync` key (default
+`enabled:false`) AND — the real finding — **no host had the SessionStart hook
+actually installed**, because:
+
+1. **rulesync's `hooks` feature is non-functional for `claudecode`** (live-
+   tested, not doc-trusted): 3 input schemas tried against
+   `.rulesync/hooks.json` (flat `{type,command}`, nested `{matcher,hooks}`,
+   both under the zod-required `Record<event, Array<...>>` shape) — every one
+   generated an **empty** `.claude/settings.json` hooks key. Undocumented
+   format, unclear if a genuine bug or an unsupported target. `link-hooks.mjs`
+   (the actual working writer) had been gated to `status`-only, throwing
+   "read-only; use portawhip sync apply so Rulesync owns the write" — an
+   assumption this test disproves.
+   - **Fix:** dropped `"hooks"` from `rulesync.jsonc`'s features (rulesync no
+     longer touches the key at all) and restored `link-hooks.mjs` install/
+     remove as the sole writer for that key — a **surgical writer on a
+     disjoint region** of a file rulesync otherwise owns (mcp/permissions/
+     etc.), exactly the coexistence rule §1c already established. Added
+     `npm run hooks:install` / `hooks:remove` (previously only `hooks` =
+     status existed — install had no script at all).
+2. **Ownership ledger is whole-file-hash, not per-key**, so once link-hooks
+   wrote the `hooks` key, `sync check` reported false-positive drift on
+   `.claude/settings.json` / `.codex/hooks.json` (rulesync's stored hash no
+   longer matched the file rulesync + link-hooks now jointly produce). Fixed
+   with `refreshLedgerBaseline()` in `link-hooks.mjs`: after a real
+   install/remove, re-claims the path under the **same writer** rulesync
+   already holds it under, with the new combined hash — same pattern
+   `reconcile.mjs`'s own `recordOwnership` uses after its apply. This is a
+   point fix, not a general per-region ledger; if a third disjoint-region
+   writer ever appears on a rulesync-owned file, this pattern generalizes but
+   isn't automatic.
+3. Live-verified end to end: `npm run hooks:install` → claude-code/codex/
+   gemini-cli all `linked`, idempotent on re-run (`no-op`). Fired the actual
+   installed command (`node adapters/hooks/universal-hook.mjs --event
+   session_start --host claude-code`) exactly as a real session start would —
+   `auto-sync.log` recorded `fan-out ok`, state updated, immediate second fire
+   correctly reported `{"skipped":"throttled"}`. `sync check --scope project`
+   clean (`status: success, drift: []`) after all of it. Full suite 251/251.
+4. `router.config.yaml`: `autoSync: { enabled: true, throttleMinutes: 60 }`
+   (was `false` by default — flipped, since the manual-path gate above and
+   Phase 4's project-scope proof (43 targets, 0 drift, pre-dating this) were
+   already satisfied). **Global stays out of auto-sync** — no automated apply
+   there yet, matching §1b.2's stricter gate.
+
 ### Phase 6 — Watchdog (last; only if a proven gap remains after Phase 5)
+
+**NOT STARTED (2026-07-14) — gate not met, on purpose.** Phase 5 (SessionStart
+auto-sync) only just went live above; it hasn't run across real multi-day
+usage yet, so there is no evidence of a gap a watchdog would close. Building a
+timer/FS-watch daemon now would be scope-adding on faith, the exact thing this
+plan's own guardrails (§3) forbid. `scripts/sync/sync-surfaces.test.mjs` has a
+standing regression test — "exposes manual sync/check only (no watchdog
+command)" — that will need to be deliberately updated, not just left to fail,
+when this phase is actually taken up.
 - Watch **canonical files only**, one-way fan-out, debounce, single-instance
   lock, hash ledger to separate user edits from generated output, periodic full
   reconcile as a backstop for missed FS events. Never sync secrets. Report drift

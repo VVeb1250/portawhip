@@ -118,3 +118,14 @@ pushMinConfidence: 0.75
 # once, then silent. (Repeat-terse already existed via sessionSuggestedIds;
 # this adds the "then shut up" cap.)
 pushMaxMentionsPerSession: 2
+# Auto-sync (Phase 5, docs/writer-consolidation-plan.md): session_start fires
+# scripts/sync/auto-sync.mjs detached, which locks+throttles+fans already-
+# canonical project-scope config out via the reconciler (backup/apply/verify/
+# rollback, same path as `portawhip sync apply`). Enabled 2026-07-14 after
+# the hooks were actually wired (`npm run hooks:install`) and one real apply
+# already proved clean (.hp-state/auto-sync.log, ownership ledger). Project
+# scope only - global stays manual (§1b.2: higher blast radius, no automated
+# apply until a separate backup-tested gate).
+autoSync:
+  enabled: true
+  throttleMinutes: 60

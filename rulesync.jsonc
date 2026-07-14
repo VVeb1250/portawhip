@@ -14,7 +14,11 @@
     "zed",
     "junie"
   ],
-  "features": ["rules", "ignore", "mcp", "commands", "subagents", "skills", "hooks", "permissions"],
+  // "hooks" excluded: live-tested 2026-07-14, rulesync's hooks feature produces
+  // an empty output for claudecode regardless of input schema (3 shapes tried,
+  // undocumented format) — link-hooks.mjs owns the hooks key directly instead,
+  // as a surgical writer on that disjoint region (see docs/writer-consolidation-plan.md).
+  "features": ["rules", "ignore", "mcp", "commands", "subagents", "skills", "permissions"],
   "outputRoots": [
     "."
   ],

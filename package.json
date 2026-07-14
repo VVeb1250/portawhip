@@ -57,6 +57,8 @@
     "doctor": "node scripts/doctor.mjs",
     "connectors": "node scripts/link/link-connectors.mjs status",
     "hooks": "node scripts/link/link-hooks.mjs status",
+    "hooks:install": "node scripts/link/link-hooks.mjs install",
+    "hooks:remove": "node scripts/link/link-hooks.mjs remove",
     "sync-config": "node scripts/sync/sync-config.mjs status",
     "sync-config:preview": "node scripts/sync/sync-config.mjs preview",
     "surface": "node scripts/surface-inventory.mjs",
