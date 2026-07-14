@@ -101,7 +101,7 @@ Use the TUI to review inventory, connector and hook status, and config-sync prev
 
 ### Configure Portawhip
 
-The packaged defaults are now overridable without cloning or editing the npm package. In the TUI, press `7`, choose user/project scope with `g`, select a setting, then press `e` to edit or `u` twice to unset:
+The packaged defaults are now overridable without cloning or editing the npm package. In the TUI, press `7`, choose user/project scope with `g`, select a setting, then press `e` to edit or `u` twice to unset. Boolean and enum values use `←`/`→` or Space; numeric fields reject non-numeric input and `Ctrl+U` clears the current value:
 
     # Inspect the effective merged configuration
     npx --yes portawhip config list

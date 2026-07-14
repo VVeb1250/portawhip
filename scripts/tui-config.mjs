@@ -35,6 +35,33 @@ export function draftForRow(row, scope) {
   return formatConfigValue(row[scope] !== undefined ? row[scope] : row.effective);
 }
 
+export function nextChoiceDraft(key, currentValue, direction = 1) {
+  const definition = CONFIG_DEFINITIONS[key];
+  if (!definition) throw new Error("unknown config key " + JSON.stringify(key));
+  const values =
+    definition.type === "boolean"
+      ? ["false", "true"]
+      : definition.type === "enum"
+        ? definition.values
+        : null;
+  if (!values) return currentValue;
+  const currentIndex = values.indexOf(String(currentValue));
+  const start = currentIndex >= 0 ? currentIndex : 0;
+  return values[(start + direction + values.length) % values.length];
+}
+
+export function appendConfigInput(key, currentValue, input) {
+  const definition = CONFIG_DEFINITIONS[key];
+  if (!definition) throw new Error("unknown config key " + JSON.stringify(key));
+  const current = String(currentValue);
+  if (definition.type === "boolean" || definition.type === "enum") return current;
+  if (definition.type === "integer") return /^[0-9]+$/.test(input) ? current + input : current;
+  if (definition.type === "number") {
+    const candidate = current + input;
+    return /^[0-9]*(?:[.][0-9]*)?$/.test(candidate) ? candidate : current;
+  }
+  return current + input;
+}
 export function validateConfigDraft(key, value) {
   return parseConfigValue(key, value);
 }

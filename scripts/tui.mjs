@@ -9,7 +9,7 @@ import { collectSurfaceInventory } from "../core/surface/surface-inventory.mjs";
 import { collectSyncConfig } from "./sync/sync-config.mjs";
 import { runReconcile } from "./sync/reconcile.mjs";
 import { LINK_SCOPES, linkActionNeedsConfirmation, linkCommandForInput, runLinkAction } from "./tui-actions.mjs";
-import { CONFIG_SCOPES, collectConfigRows, draftForRow, formatConfigValue, runConfigWrite, validateConfigDraft } from "./tui-config.mjs";
+import { CONFIG_SCOPES, appendConfigInput, collectConfigRows, draftForRow, formatConfigValue, nextChoiceDraft, runConfigWrite, validateConfigDraft } from "./tui-config.mjs";
 
 const TABS = ["overview", "sync", "connectors", "hooks", "enrich", "capabilities", "settings"];
 const TAB_COPY = {
@@ -136,7 +136,7 @@ Keys:
   sync tab: f profile, b backend, g scope, d direction, i include
   sync actions: s status, p preview, a apply (press twice to confirm)
   connectors/hooks tabs: g scope, s status, l install or repair (press twice), x remove (press twice)
-  settings tab: g scope, e edit, u unset (writes require confirmation)
+  settings tab: g scope, e edit, u unset; boolean/enum use left/right or space
 
 Safety:
   sync apply requires one backend plus an include selector or safe profile.
@@ -462,10 +462,18 @@ function ConfigRows({ rows, selected, height, width, scope }) {
 }
 
 function ConfigControls({ scope, edit, armedAction }) {
+  const editHint =
+    edit?.type === "boolean" || edit?.type === "enum"
+      ? "left/right or space to choose; enter validates"
+      : edit?.type === "integer"
+        ? "digits only; ctrl+u clears; enter validates"
+        : edit?.type === "number"
+          ? "digits + one decimal point; ctrl+u clears; enter validates"
+          : "type value; ctrl+u clears; enter validates";
   const writeHint = edit
     ? edit.armed
       ? "press enter again to save"
-      : "type value; enter to validate; esc cancels"
+      : editHint
     : armedAction
       ? "confirm unset: press u again"
       : "g scope  e edit  u unset";
@@ -555,7 +563,7 @@ function HelpPanel({ tab, width }) {
     "sync tab: f profile  b backend  g scope  d direction  i include  s status  p preview  a apply",
     "connectors/hooks tabs: g scope  s status (read-only; writes use sync tab)",
     "enrich tab: e refresh cached tool descriptions",
-    "settings tab: g scope, e edit, u unset (confirm writes)",
+    "settings tab: g scope, e edit, u unset; boolean/enum use left/right or space",
   ];
   return React.createElement(
     Box,
@@ -645,6 +653,19 @@ function App() {
           setMessage("config edit cancelled");
           return;
         }
+        if (
+          (configEdit.type === "boolean" || configEdit.type === "enum") &&
+          (key.leftArrow || key.rightArrow || input === " ")
+        ) {
+          const direction = key.leftArrow ? -1 : 1;
+          setConfigEdit((current) => ({
+            ...current,
+            value: nextChoiceDraft(current.key, current.value, direction),
+            armed: false,
+          }));
+          setMessage("");
+          return;
+        }
         if (key.return) {
           try {
             validateConfigDraft(configEdit.key, configEdit.value);
@@ -669,13 +690,35 @@ function App() {
           }
           return;
         }
+        if (key.ctrl && input === "u") {
+          if (configEdit.type === "boolean" || configEdit.type === "enum") {
+            setMessage("use left/right or space to choose a value");
+            return;
+          }
+          setConfigEdit((current) => ({ ...current, value: "", armed: false }));
+          setMessage("");
+          return;
+        }
         if (key.backspace || key.delete) {
+          if (configEdit.type === "boolean" || configEdit.type === "enum") {
+            setMessage("use left/right or space to choose a value");
+            return;
+          }
           setConfigEdit((current) => ({ ...current, value: current.value.slice(0, -1), armed: false }));
           setMessage("");
           return;
         }
         if (input && !key.ctrl && !key.meta) {
-          setConfigEdit((current) => ({ ...current, value: current.value + input, armed: false }));
+          const nextValue = appendConfigInput(configEdit.key, configEdit.value, input);
+          if (nextValue === configEdit.value) {
+            setMessage(
+              configEdit.type === "boolean" || configEdit.type === "enum"
+                ? "use left/right or space to choose a value"
+                : "that character is not valid for this numeric setting",
+            );
+            return;
+          }
+          setConfigEdit((current) => ({ ...current, value: nextValue, armed: false }));
           setMessage("");
         }
         return;
@@ -815,7 +858,7 @@ function App() {
           return;
         }
         if (input === "e" && row) {
-          setConfigEdit({ key: row.key, value: draftForRow(row, configScope), armed: false });
+          setConfigEdit({ key: row.key, type: row.type, value: draftForRow(row, configScope), armed: false });
           setArmedConfigAction(null);
           setMessage("editing " + row.key + "; enter validates, enter again saves");
           return;
