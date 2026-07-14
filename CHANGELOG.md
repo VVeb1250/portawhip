@@ -2,6 +2,22 @@
 
 All notable user-facing changes are documented here.
 
+## [0.3.0](https://github.com/VVeb1250/portawhip/compare/portawhip-v0.2.1...portawhip-v0.3.0) (2026-07-14)
+
+
+### Features
+
+* **scope:** derive MCP project/global scope from config, add consolidation docs ([e9ab947](https://github.com/VVeb1250/portawhip/commit/e9ab94715b128d25e26089907368d74af8da39c0))
+* **scope:** merge compatible MCP variants instead of blocking on any difference ([ba660cb](https://github.com/VVeb1250/portawhip/commit/ba660cba910a0c26b0862bbea599d65a505e949d))
+* **scope:** wire derived scope into global MCP seed ([3e9ba73](https://github.com/VVeb1250/portawhip/commit/3e9ba736af8f7272bc272d4974333e3926ad90b8))
+* **sync:** wire real SessionStart auto-sync, fix orphaned hook writer ([f7d6949](https://github.com/VVeb1250/portawhip/commit/f7d694977a9d351256d1d2b66d755f58c88438dc))
+
+
+### Bug Fixes
+
+* **deps:** regenerate package-lock.json, npm ci was broken ([532af0e](https://github.com/VVeb1250/portawhip/commit/532af0edc00080ef1bb60b4ee04b7922acca725d))
+* **test:** make reconcile fixture path cross-platform ([04c055e](https://github.com/VVeb1250/portawhip/commit/04c055e8c879b2bafb0f9fb54c0f16257a8bb3b1))
+
 ## [0.2.1](https://github.com/VVeb1250/portawhip/compare/portawhip-v0.2.0...portawhip-v0.2.1) (2026-07-12)
 
 
