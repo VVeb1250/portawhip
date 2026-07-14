@@ -14,18 +14,27 @@ Stop loading every capability into every prompt. Portawhip discovers what is ins
 
 </div>
 
-## Try it
+## Install
 
-Launch the interactive control surface without installing anything globally:
+Portawhip is published on npm and requires Node.js 20 or newer. Run it once without installing anything globally:
 
 ```bash
-npx portawhip
+npx --yes portawhip
 ```
 
-Or route a task directly:
+Or install the CLI globally:
 
 ```bash
-npx --package portawhip portawhip-router route --prompt "inspect this PDF and extract its tables"
+npm install --global portawhip
+portawhip
+```
+
+No repository clone is required for normal use. The npm package provides three executables: `portawhip` for the interactive TUI, `portawhip-router` for direct routing, and `harness-router` for MCP hosts.
+
+Route a task directly from npm:
+
+```bash
+npx --yes --package=portawhip -- portawhip-router route --prompt "inspect this PDF and extract its tables"
 ```
 
 Portawhip returns a short, actionable pointer—or nothing. Abstaining on weak matches is a feature, so unrelated prompts stay clean.
@@ -45,7 +54,7 @@ AI agent setups drift quickly: one host knows about an MCP server, another has t
 ### 1. Interactive TUI
 
 ```bash
-npx portawhip
+npx --yes portawhip
 ```
 
 The six tabs cover overview, config sync, connectors, hooks, enrichment, and the capability catalog. Press `h` or `?` for the key map. Repair/remove actions require a second keypress.
@@ -53,8 +62,8 @@ The six tabs cover overview, config sync, connectors, hooks, enrichment, and the
 ### 2. Router CLI
 
 ```bash
-npx --package portawhip portawhip-router list --type skill
-npx --package portawhip portawhip-router route --prompt "run an accessibility-focused browser test"
+npx --yes --package=portawhip -- portawhip-router list --type skill
+npx --yes --package=portawhip -- portawhip-router route --prompt "run an accessibility-focused browser test"
 ```
 
 Dense retrieval uses a local multilingual embedding model and warms in the background. Add `--dense-block` when deterministic full semantic retrieval matters more than startup latency.
@@ -68,7 +77,7 @@ Add this stdio server to any MCP-compatible host:
   "mcpServers": {
     "harness-router": {
       "command": "npx",
-      "args": ["--yes", "--package", "portawhip", "harness-router"]
+      "args": ["--yes", "--package=portawhip", "--", "harness-router"]
     }
   }
 }
@@ -79,33 +88,16 @@ The server exposes:
 - `route(query)` — find the best installed capability for a concrete action.
 - `list_all(type?)` — inspect the catalog, optionally filtered by capability type.
 
-## Install a managed workspace
+## Manage a workspace
 
-For connector/hook linking and repeatable team configuration, install the repository locally:
-
-```bash
-git clone https://github.com/VVeb1250/portawhip.git
-cd portawhip
-npm ci
-npm run doctor
-```
-
-Then inspect before writing:
+Run Portawhip from the root of the project you want it to inspect. It discovers both project-local and global agent surfaces from the current working directory:
 
 ```bash
-npm run connectors
-npm run hooks
-npm run sync-config:preview
+cd path/to/your-project
+npx --yes portawhip
 ```
 
-Link supported hosts only when the preview looks right:
-
-```bash
-npm run connectors:link -- --scope global
-npm run hooks:link -- --scope global
-```
-
-Global connector and hook changes are a trust boundary. Back up host configuration first; Portawhip does not silently activate third-party embedded hooks.
+Use the TUI to review inventory, connector and hook status, and config-sync previews before applying changes. Global connector and hook changes are a trust boundary: back up host configuration first. Portawhip does not silently activate third-party embedded hooks.
 
 ## How it works
 
@@ -130,14 +122,12 @@ The loader delegates installation to maintained tools (`add-mcp`, `mise`, and `a
 
 | Goal | Command |
 | --- | --- |
-| Health check | `npm run doctor` |
-| Interactive TUI | `npm run tui` |
-| Connector status | `npm run connectors` |
-| Hook status | `npm run hooks` |
-| Config-sync preview | `npm run sync-config:preview` |
-| Import preview | `npm run import:preview` |
-| Route evaluation | `npm run route:eval` |
-| Full tests | `npm test` |
+| Interactive TUI | `npx --yes portawhip` |
+| List discovered skills | `npx --yes --package=portawhip -- portawhip-router list --type skill` |
+| Route a task | `npx --yes --package=portawhip -- portawhip-router route --prompt "your task"` |
+| Global install | `npm install --global portawhip` |
+
+Repository-level commands such as `npm test`, `npm run doctor`, and `npm run route:eval` are for contributors working from a source checkout.
 
 ## Supported surfaces
 
