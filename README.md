@@ -1,6 +1,6 @@
 <div align="center">
 
-# portawhip
+# <img width="646" height="87" alt="portawhip" src="https://github.com/user-attachments/assets/bfb6583b-a7e3-4237-8776-0de6cf18379f" />
 
 **One control plane for the tools, skills, MCP servers, and hooks used by your AI coding agents.**
 
