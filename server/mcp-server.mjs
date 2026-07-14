@@ -4,14 +4,14 @@
 // call directly — no per-host code beyond this one stdio process.
 
 import { fileURLToPath } from "node:url";
-import { dirname, join, isAbsolute } from "node:path";
+import { dirname, join } from "node:path";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 import { loadIndex } from "../core/registry/registry.mjs";
 import { listAll } from "../core/router/scorer.mjs";
 import { explainRoute } from "../core/router/route-entry.mjs";
-import { loadConfig } from "../core/state/config.mjs";
+import { loadRuntimeConfig } from "../core/state/config.mjs";
 import { computeFactors, logEvent } from "../core/state/feedback.mjs";
 import { stackFactors, combineFactors } from "../core/state/stack-detect.mjs";
 import { readActiveSelection, resolveRecipePaths } from "../core/state/bundle-state.mjs";
@@ -46,14 +46,7 @@ server.tool(
   { query: z.string(), k: z.number().optional() },
   async ({ query, k }) => {
     const index = await loadIndex(RECIPE_PATHS);
-    const config = loadConfig(CONFIG_PATH);
-    // Same class of bug fixed earlier for recipe.yaml/router.config.yaml:
-    // graphPath in config is written as a repo-relative string, which
-    // silently resolves against the CALLER's cwd, not this repo, when this
-    // server is invoked from elsewhere (which is the whole point of
-    // installing it globally).
-    const graphPath =
-      config.graphPath && !isAbsolute(config.graphPath) ? join(ROOT, config.graphPath) : config.graphPath;
+    const config = loadRuntimeConfig({ basePath: CONFIG_PATH, cwd: process.cwd() });
     const factors = combineFactors(computeFactors(FEEDBACK_ROOT), stackFactors(index, process.cwd()));
     // denseBlock:false - this is the interactive tier. A cold dense-model load
     // must never block a route() call (it would time the MCP client out; see
@@ -61,7 +54,6 @@ server.tool(
     // once the background warm (started at server boot below) finishes.
     const result = await explainRoute(index, query, {
       ...config,
-      graphPath,
       k: k ?? config.k,
       factors,
       denseBlock: false,

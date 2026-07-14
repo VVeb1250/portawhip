@@ -10,13 +10,16 @@ export function commandFor(argv) {
   if (argv[0] === "sync") {
     return { script: join(ROOT, "sync", "reconcile.mjs"), args: argv.slice(1) };
   }
+  if (argv[0] === "config") {
+    return { script: join(ROOT, "config.mjs"), args: argv.slice(1) };
+  }
   if (argv.length === 0 || argv[0] === "tui") {
     return { script: join(ROOT, "tui.mjs"), args: argv[0] === "tui" ? argv.slice(1) : argv };
   }
   if (argv[0] === "--help" || argv[0] === "-h" || argv[0] === "help") {
     return { help: true, script: null, args: [] };
   }
-  throw new Error(`unknown command \"${argv[0]}\"; use portawhip sync <check|apply|verify> or portawhip tui`);
+  throw new Error(`unknown command \"${argv[0]}\"; use portawhip config, sync, or tui`);
 }
 
 function printHelp() {
@@ -25,6 +28,8 @@ function printHelp() {
   portawhip sync check              report generated-host drift
   portawhip sync apply --apply      backup, generate, verify, and record ownership
   portawhip sync verify             verify rulesync output and ownership hashes
+  portawhip config list             show effective user + project settings
+  portawhip config set <key> <value> [--scope user|project]
 
 options for sync: --scope project|global|all  --force  --json`);
 }

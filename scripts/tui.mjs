@@ -9,13 +9,15 @@ import { collectSurfaceInventory } from "../core/surface/surface-inventory.mjs";
 import { collectSyncConfig } from "./sync/sync-config.mjs";
 import { runReconcile } from "./sync/reconcile.mjs";
 import { LINK_SCOPES, linkActionNeedsConfirmation, linkCommandForInput, runLinkAction } from "./tui-actions.mjs";
+import { CONFIG_SCOPES, appendConfigInput, collectConfigRows, draftForRow, formatConfigValue, nextChoiceDraft, runConfigWrite, validateConfigDraft } from "./tui-config.mjs";
+import { selectionStyle } from "./tui-theme.mjs";
 
-const TABS = ["overview", "sync", "connectors", "hooks", "enrich", "capabilities"];
+const TABS = ["overview", "sync", "connectors", "hooks", "enrich", "capabilities", "settings"];
 const TAB_COPY = {
   overview: {
     title: "Start here",
     description: "See what portawhip found and choose the next check.",
-    action: "Press 2 for sync, 3 for connectors, 4 for hooks, 5 for enrich, 6 for capabilities.",
+    action: "Press 2 for sync, 3 for connectors, 4 for hooks, 5 for enrich, 6 for capabilities, 7 for settings.",
   },
   sync: {
     title: "Config sync",
@@ -41,6 +43,11 @@ const TAB_COPY = {
     title: "Routable capabilities",
     description: "Browse the skills, MCP servers, and CLI tools the router can suggest.",
     action: "Use up/down to inspect rows; details appear below the list.",
+  },
+  settings: {
+    title: "Router settings",
+    description: "Inspect effective values and edit user or project overrides.",
+    action: "Use g for scope, e to edit, and u twice to unset an override.",
   },
 };
 const MIN_LIST_HEIGHT = 3;
@@ -101,7 +108,7 @@ function statusColor(status) {
 
 function layoutForRows(terminalRows, hasDetail, hasHelp = false) {
   const headerRows = 4;
-  const helpRows = hasHelp ? 6 : 0;
+  const helpRows = hasHelp ? 7 : 0;
   const footerRows = 1;
   const margins = hasDetail ? 2 : 1;
   const available = Math.max(MIN_LIST_HEIGHT, terminalRows - headerRows - helpRows - footerRows - margins);
@@ -125,11 +132,12 @@ Usage:
   node scripts/tui.mjs --help
 
 Keys:
-  1-6 jump tabs, tab/right next tab, left previous tab
+  1-7 jump tabs, tab/right next tab, left previous tab
   up/down select rows, h or ? help, r refresh, q quit
   sync tab: f profile, b backend, g scope, d direction, i include
   sync actions: s status, p preview, a apply (press twice to confirm)
   connectors/hooks tabs: g scope, s status, l install or repair (press twice), x remove (press twice)
+  settings tab: g scope, e edit, u unset; boolean/enum use left/right or space
 
 Safety:
   sync apply requires one backend plus an include selector or safe profile.
@@ -201,7 +209,7 @@ function Header({ tab, loading, enriching, syncing, linking }) {
       TABS.map((item, index) =>
         React.createElement(
           Text,
-          { key: item, inverse: item === tab, color: item === tab ? "black" : "white" },
+          { key: item, color: "white", ...selectionStyle(item === tab) },
           ` ${index + 1}:${item} `,
         ),
       ),
@@ -258,7 +266,8 @@ function Overview({ inventory }) {
     React.createElement(Text, null, "1  Press 2, then f to choose a safe sync profile and p to preview."),
     React.createElement(Text, null, "2  Press 3 or 4 to inspect connector and hook status without writing."),
     React.createElement(Text, null, "3  Press 5, then e when tool descriptions need enrichment."),
-    React.createElement(Text, { color: "gray" }, "Press h or ? for the key map. Destructive actions always ask twice."),
+    React.createElement(Text, null, "4  Press 7 to inspect and edit router settings for this user or project."),
+    React.createElement(Text, { color: "gray" }, "Press h or ? for the key map. Config writes and destructive actions always ask twice."),
   );
 }
 
@@ -340,7 +349,7 @@ function ConnectorRows({ rows, selected, height, width }) {
       React.createElement(
         Box,
         { key: `${row.hostId}-${row.scope}-${row.path ?? "mcp"}` },
-        React.createElement(Text, { inverse: active }, active ? ">" : " "),
+        React.createElement(Text, { ...selectionStyle(active) }, active ? ">" : " "),
         React.createElement(Text, { bold: true }, ` ${row.hostId.padEnd(20)}`),
         React.createElement(Text, { color: "gray" }, `${row.scope.padEnd(8)}`),
         React.createElement(Text, { color: statusColor(row.mcpStatus) }, `mcp:${row.mcpStatus.padEnd(8)} `),
@@ -363,7 +372,7 @@ function HookRows({ rows, selected, height, width }) {
       React.createElement(
         Box,
         { key: `${row.hostId}-${row.scope}` },
-        React.createElement(Text, { inverse: active }, active ? ">" : " "),
+        React.createElement(Text, { ...selectionStyle(active) }, active ? ">" : " "),
         React.createElement(Text, { bold: true }, ` ${row.hostId.padEnd(20)}`),
         React.createElement(Text, { color: "gray" }, `${row.scope.padEnd(8)}`),
         React.createElement(Text, { color: statusColor(row.status) }, `${row.status.padEnd(12)} `),
@@ -385,7 +394,7 @@ function CapabilityRows({ rows, selected, height, width }) {
       React.createElement(
         Box,
         { key: `${row.type}-${row.id}` },
-        React.createElement(Text, { inverse: active }, active ? ">" : " "),
+        React.createElement(Text, { ...selectionStyle(active) }, active ? ">" : " "),
         React.createElement(Text, { bold: true }, ` ${row.id.slice(0, 28).padEnd(30)}`),
         React.createElement(Text, { color: "cyan" }, `${row.type.padEnd(8)}`),
         React.createElement(Text, { color: "gray" }, `${row.origin.padEnd(12)}`),
@@ -403,7 +412,7 @@ function EnrichRows({ rows, selected, height, width }) {
       React.createElement(
         Box,
         { key: `${row.type}-${row.id}` },
-        React.createElement(Text, { inverse: active }, active ? ">" : " "),
+        React.createElement(Text, { ...selectionStyle(active) }, active ? ">" : " "),
         React.createElement(Text, { bold: true }, ` ${row.id.slice(0, 26).padEnd(28)}`),
         React.createElement(Text, { color: "cyan" }, `${row.type.padEnd(6)}`),
         React.createElement(Text, { color: statusColor(row.status) }, `${row.status.padEnd(10)} `),
@@ -422,7 +431,7 @@ function SyncRows({ rows, selected, height, width }) {
       React.createElement(
         Box,
         { key: `${row.backend}-${row.action}` },
-        React.createElement(Text, { inverse: active }, active ? ">" : " "),
+        React.createElement(Text, { ...selectionStyle(active) }, active ? ">" : " "),
         React.createElement(Text, { bold: true }, ` ${row.backend.slice(0, 22).padEnd(24)}`),
         React.createElement(Text, { color: statusColor(row.status) }, `${row.status.padEnd(11)} `),
         React.createElement(Text, { color: "cyan" }, `${row.action.padEnd(8)} `),
@@ -431,6 +440,74 @@ function SyncRows({ rows, selected, height, width }) {
   });
 }
 
+function ConfigRows({ rows, selected, height, width, scope }) {
+  return React.createElement(Rows, {
+    rows,
+    selected,
+    height,
+    renderRow: (row, active) => {
+      const override = row[scope] === undefined ? "(inherit)" : formatConfigValue(row[scope]);
+      return React.createElement(
+        Box,
+        { key: row.key },
+        React.createElement(Text, { ...selectionStyle(active) }, active ? ">" : " "),
+        React.createElement(Text, { bold: true }, " " + row.key.slice(0, 30).padEnd(32)),
+        React.createElement(Text, { color: "cyan" }, row.type.padEnd(9)),
+        React.createElement(Text, { color: "gray" }, "effective:"),
+        React.createElement(Text, null, truncate(formatConfigValue(row.effective), Math.max(8, Math.floor((width - 62) / 2)))),
+        React.createElement(Text, { color: "gray" }, "  " + scope + ":"),
+        React.createElement(Text, { color: row[scope] === undefined ? "gray" : "green" }, truncate(override, Math.max(8, Math.floor((width - 62) / 2)))),
+      );
+    },
+  });
+}
+
+function ConfigControls({ scope, row, edit, armedAction }) {
+  const editHint =
+    edit?.type === "boolean" || edit?.type === "enum"
+      ? "left/right or space to choose; enter validates"
+      : edit?.type === "integer"
+        ? "digits only; ctrl+u clears; enter validates"
+        : edit?.type === "number"
+          ? "digits + one decimal point; ctrl+u clears; enter validates"
+          : "type value; ctrl+u clears; enter validates";
+  const writeHint = edit
+    ? edit.armed
+      ? "press enter again to save"
+      : editHint
+    : armedAction
+      ? "confirm unset: press u again"
+      : "g scope  e edit  u unset";
+  return React.createElement(
+    Box,
+    { flexDirection: "column", marginBottom: 1 },
+    React.createElement(
+      Text,
+      null,
+      React.createElement(Text, { color: "gray" }, "scope "),
+      React.createElement(Text, { color: "cyan", bold: true }, scope),
+      React.createElement(Text, { color: "gray" }, "  writes "),
+      React.createElement(Text, null, "confirmed " + scope + " overrides only"),
+    ),
+    row
+      ? React.createElement(
+          Text,
+          { wrap: "truncate-end" },
+          React.createElement(Text, { color: "cyan", bold: true }, row.key),
+          React.createElement(Text, { color: "gray" }, " - " + row.description + " (" + row.inputHint + ")"),
+        )
+      : null,
+    edit
+      ? React.createElement(
+          Text,
+          null,
+          React.createElement(Text, { color: "gray" }, edit.key + " = "),
+          React.createElement(Text, { ...selectionStyle(true) }, edit.value || " "),
+          React.createElement(Text, { color: edit.armed ? "yellow" : "gray" }, "  " + writeHint),
+        )
+      : React.createElement(Text, { color: armedAction ? "yellow" : "gray" }, writeHint),
+  );
+}
 function SyncControls({ action, selection, armedApply }) {
   const applyHint = armedApply ? "confirm apply: press a again" : "a apply";
   return React.createElement(
@@ -490,11 +567,12 @@ function EmptyState({ tab }) {
 function HelpPanel({ tab, width }) {
   const copy = TAB_COPY[tab];
   const rows = [
-    "1-6 jump tabs  tab/right next tab  left previous tab",
+    "1-7 jump tabs  tab/right next tab  left previous tab",
     "up/down select rows  r refresh  h or ? toggle help  q quit",
     "sync tab: f profile  b backend  g scope  d direction  i include  s status  p preview  a apply",
     "connectors/hooks tabs: g scope  s status (read-only; writes use sync tab)",
     "enrich tab: e refresh cached tool descriptions",
+    "settings tab: g scope, e edit, u unset; boolean/enum use left/right or space",
   ];
   return React.createElement(
     Box,
@@ -548,8 +626,13 @@ function App() {
   const [linkResult, setLinkResult] = useState(null);
   const [armedLinkAction, setArmedLinkAction] = useState(null);
   const [showHelp, setShowHelp] = useState(false);
+  const [settingsRows, setSettingsRows] = useState(() => collectConfigRows());
+  const [configScopeIndex, setConfigScopeIndex] = useState(0);
+  const [configEdit, setConfigEdit] = useState(null);
+  const [armedConfigAction, setArmedConfigAction] = useState(null);
   const tab = TABS[tabIndex];
   const linkScope = LINK_SCOPES[linkScopeIndex];
+  const configScope = CONFIG_SCOPES[configScopeIndex];
   const syncSelectionState = useMemo(
     () => syncSelection({ backendIndex, scopeIndex, directionIndex, includeIndex, profileIndex }),
     [backendIndex, scopeIndex, directionIndex, includeIndex, profileIndex],
@@ -561,8 +644,9 @@ function App() {
     if (tab === "hooks") return linkResult?.tab === "hooks" ? linkResult.rows : inventory.hooks;
     if (tab === "enrich") return inventory.enrichments;
     if (tab === "capabilities") return inventory.capabilities;
+    if (tab === "settings") return settingsRows;
     return [];
-  }, [inventory, tab, syncResult, syncSelectionState, syncAction, linkResult]);
+  }, [inventory, tab, syncResult, syncSelectionState, syncAction, linkResult, settingsRows]);
 
   useEffect(() => {
     setSelected((index) => Math.min(index, Math.max(rows.length - 1, 0)));
@@ -572,6 +656,82 @@ function App() {
 
   useInput(
     (input, key) => {
+      if (tab === "settings" && configEdit) {
+        if (key.escape) {
+          setConfigEdit(null);
+          setMessage("config edit cancelled");
+          return;
+        }
+        if (
+          (configEdit.type === "boolean" || configEdit.type === "enum") &&
+          (key.leftArrow || key.rightArrow || input === " ")
+        ) {
+          const direction = key.leftArrow ? -1 : 1;
+          setConfigEdit((current) => ({
+            ...current,
+            value: nextChoiceDraft(current.key, current.value, direction),
+            armed: false,
+          }));
+          setMessage("");
+          return;
+        }
+        if (key.return) {
+          try {
+            validateConfigDraft(configEdit.key, configEdit.value);
+            if (!configEdit.armed) {
+              setConfigEdit((current) => ({ ...current, armed: true }));
+              setMessage("config value valid; press enter again to save");
+              return;
+            }
+            runConfigWrite({
+              action: "set",
+              key: configEdit.key,
+              value: configEdit.value,
+              scope: configScope,
+            });
+            setSettingsRows(collectConfigRows());
+            setMessage("saved " + configEdit.key + " (" + configScope + ")");
+            setConfigEdit(null);
+            setArmedConfigAction(null);
+          } catch (error) {
+            setConfigEdit((current) => ({ ...current, armed: false }));
+            setMessage("config error: " + error.message);
+          }
+          return;
+        }
+        if (key.ctrl && input === "u") {
+          if (configEdit.type === "boolean" || configEdit.type === "enum") {
+            setMessage("use left/right or space to choose a value");
+            return;
+          }
+          setConfigEdit((current) => ({ ...current, value: "", armed: false }));
+          setMessage("");
+          return;
+        }
+        if (key.backspace || key.delete) {
+          if (configEdit.type === "boolean" || configEdit.type === "enum") {
+            setMessage("use left/right or space to choose a value");
+            return;
+          }
+          setConfigEdit((current) => ({ ...current, value: current.value.slice(0, -1), armed: false }));
+          setMessage("");
+          return;
+        }
+        if (input && !key.ctrl && !key.meta) {
+          const nextValue = appendConfigInput(configEdit.key, configEdit.value, input);
+          if (nextValue === configEdit.value) {
+            setMessage(
+              configEdit.type === "boolean" || configEdit.type === "enum"
+                ? "use left/right or space to choose a value"
+                : "that character is not valid for this numeric setting",
+            );
+            return;
+          }
+          setConfigEdit((current) => ({ ...current, value: nextValue, armed: false }));
+          setMessage("");
+        }
+        return;
+      }
       if (input === "q" || key.escape) exit();
       const numericTab = Number(input);
       if (Number.isInteger(numericTab) && numericTab >= 1 && numericTab <= TABS.length) {
@@ -579,6 +739,8 @@ function App() {
         setSelected(0);
         setArmedApply(false);
         setArmedLinkAction(null);
+        setConfigEdit(null);
+        setArmedConfigAction(null);
         return;
       }
       if (input === "h" || input === "?") {
@@ -589,7 +751,14 @@ function App() {
         setMessage("");
         setLinkResult(null);
         setArmedLinkAction(null);
+        setConfigEdit(null);
+        setArmedConfigAction(null);
         refresh();
+        try {
+          setSettingsRows(collectConfigRows());
+        } catch (configError) {
+          setMessage("config error: " + configError.message);
+        }
       }
       if (tab === "sync" && !syncing) {
         const runSync = (action) => {
@@ -688,6 +857,39 @@ function App() {
           .catch((err) => setMessage(err.message))
           .finally(() => setEnriching(false));
       }
+      if (tab === "settings") {
+        const row = settingsRows[selected];
+        if (input === "g") {
+          setConfigScopeIndex((index) => (index + 1) % CONFIG_SCOPES.length);
+          setConfigEdit(null);
+          setArmedConfigAction(null);
+          setMessage("");
+          return;
+        }
+        if (input === "e" && row) {
+          setConfigEdit({ key: row.key, type: row.type, value: draftForRow(row, configScope), armed: false });
+          setArmedConfigAction(null);
+          setMessage("editing " + row.key + "; enter validates, enter again saves");
+          return;
+        }
+        if (input === "u" && row) {
+          const actionKey = "unset:" + configScope + ":" + row.key;
+          if (armedConfigAction !== actionKey) {
+            setArmedConfigAction(actionKey);
+            setMessage("unset is armed; press u again to remove the " + configScope + " override");
+            return;
+          }
+          try {
+            const result = runConfigWrite({ action: "unset", key: row.key, scope: configScope });
+            setSettingsRows(collectConfigRows());
+            setMessage(result.removed ? "unset " + row.key + " (" + configScope + ")" : row.key + " has no " + configScope + " override");
+          } catch (error) {
+            setMessage("config error: " + error.message);
+          }
+          setArmedConfigAction(null);
+          return;
+        }
+      }
       if ((tab === "connectors" || tab === "hooks") && !linking) {
         const requestedAction = linkCommandForInput(tab, input);
         if (input === "g") {
@@ -721,12 +923,16 @@ function App() {
         setSelected(0);
         setArmedApply(false);
         setArmedLinkAction(null);
+        setConfigEdit(null);
+        setArmedConfigAction(null);
       }
       if (key.leftArrow) {
         setTabIndex((index) => (index - 1 + TABS.length) % TABS.length);
         setSelected(0);
         setArmedApply(false);
         setArmedLinkAction(null);
+        setConfigEdit(null);
+        setArmedConfigAction(null);
       }
       if (key.upArrow) setSelected((index) => Math.max(0, index - 1));
       if (key.downArrow) setSelected((index) => Math.min(Math.max(rows.length - 1, 0), index + 1));
@@ -747,6 +953,9 @@ function App() {
     tab === "connectors" || tab === "hooks"
       ? React.createElement(LinkControls, { tab, scope: linkScope, action: linkAction, armedAction: armedLinkAction })
       : null,
+    tab === "settings"
+      ? React.createElement(ConfigControls, { scope: configScope, row: rows[selected], edit: configEdit, armedAction: armedConfigAction })
+      : null,
     tab !== "overview" && rows.length === 0 ? React.createElement(EmptyState, { tab }) : null,
     tab === "sync" && rows.length > 0
       ? React.createElement(SyncRows, { rows, selected, height: Math.max(MIN_LIST_HEIGHT, layout.listHeight - 2), width: columns })
@@ -758,6 +967,9 @@ function App() {
     tab === "enrich" && rows.length > 0 ? React.createElement(EnrichRows, { rows, selected, height: layout.listHeight, width: columns }) : null,
     tab === "capabilities" && rows.length > 0
       ? React.createElement(CapabilityRows, { rows, selected, height: layout.listHeight, width: columns })
+      : null,
+    tab === "settings" && rows.length > 0
+      ? React.createElement(ConfigRows, { rows, selected, height: Math.max(MIN_LIST_HEIGHT, layout.listHeight - 2), width: columns, scope: configScope })
       : null,
     tab === "overview" || rows.length === 0 ? null : React.createElement(Detail, { row: rows[selected], tab, width: columns, height: layout.detailHeight }),
     message ? React.createElement(Text, { color: messageColor(message) }, message) : null,
@@ -775,6 +987,7 @@ if (cliArgs.has("--help") || cliArgs.has("-h")) {
   printHelp();
 } else if (!process.stdin.isTTY || !process.stdout.isTTY || cliArgs.has("--summary")) {
   const inventory = await collectSurfaceInventory();
+  const settings = collectConfigRows();
   const attention = [
     ...(inventory.summary.connectors.missing ? [`connectors missing=${inventory.summary.connectors.missing}`] : []),
     ...(inventory.summary.connectors["mcp-only"] ? [`connectors mcp-only=${inventory.summary.connectors["mcp-only"]}`] : []),
@@ -790,6 +1003,7 @@ if (cliArgs.has("--help") || cliArgs.has("-h")) {
       `hooks ${inventory.hooks.length}: ${JSON.stringify(inventory.summary.hooks)}`,
       `enrich ${inventory.enrichments.length}: ${JSON.stringify(inventory.summary.enrichments)}`,
       `capabilities ${inventory.capabilities.length}: ${JSON.stringify(inventory.summary.capabilities)}`,
+      `settings ${settings.length}: user=${settings.filter((row) => row.user !== undefined).length} project=${settings.filter((row) => row.project !== undefined).length}`,
       `attention ${attention.length ? attention.join("; ") : "none"}`,
       "run with --help for keys and safety notes",
     ].join("\n"),

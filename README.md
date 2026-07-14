@@ -57,7 +57,7 @@ AI agent setups drift quickly: one host knows about an MCP server, another has t
 npx --yes portawhip
 ```
 
-The six tabs cover overview, config sync, connectors, hooks, enrichment, and the capability catalog. Press `h` or `?` for the key map. Repair/remove actions require a second keypress.
+The seven tabs cover overview, config sync, connectors, hooks, enrichment, the capability catalog, and router settings. Press `7` to configure user/project overrides, or `h`/`?` for the full key map. Config writes and repair/remove actions require confirmation.
 
 ### 2. Router CLI
 
@@ -99,6 +99,31 @@ npx --yes portawhip
 
 Use the TUI to review inventory, connector and hook status, and config-sync previews before applying changes. Global connector and hook changes are a trust boundary: back up host configuration first. Portawhip does not silently activate third-party embedded hooks.
 
+### Configure Portawhip
+
+The packaged defaults are now overridable without cloning or editing the npm package. In the TUI, press `7`, choose user/project scope with `g`, select a setting, then press `e` to edit or `u` twice to unset. Boolean and enum values use `←`/`→` or Space; numeric fields reject non-numeric input and `Ctrl+U` clears the current value:
+
+    # Inspect the effective merged configuration
+    npx --yes portawhip config list
+
+    # Persist a preference for this user
+    npx --yes portawhip config set denseEnabled false
+
+    # Override it only in the current project
+    npx --yes portawhip config set denseEnabled true --scope project
+
+    # Return to the inherited value
+    npx --yes portawhip config unset denseEnabled --scope project
+
+Configuration is layered from lowest to highest priority:
+
+1. packaged <code>router.config.yaml</code>
+2. user config (<code>%APPDATA%portawhipconfig.yaml</code> on Windows, <code>$XDG_CONFIG_HOME/portawhip/config.yaml</code> or <code>~/.config/portawhip/config.yaml</code> elsewhere)
+3. <code>&lt;project&gt;/.portawhip/config.yaml</code>
+4. the file named by <code>PORTAWHIP_CONFIG</code>
+
+Use <code>portawhip config get &lt;key&gt;</code>, <code>list</code>, <code>set</code>, <code>unset</code>, or <code>path</code>; add <code>--json</code> for machine-readable output. Values are type- and range-checked before writes. Run <code>portawhip config --help</code> for the full command reference.
+
 ## How it works
 
 ```text
@@ -123,6 +148,8 @@ The loader delegates installation to maintained tools (`add-mcp`, `mise`, and `a
 | Goal | Command |
 | --- | --- |
 | Interactive TUI | `npx --yes portawhip` |
+| Show effective configuration | <code>npx --yes portawhip config list</code> |
+| Set a user preference | <code>npx --yes portawhip config set &lt;key&gt; &lt;value&gt;</code> |
 | List discovered skills | `npx --yes --package=portawhip -- portawhip-router list --type skill` |
 | Route a task | `npx --yes --package=portawhip -- portawhip-router route --prompt "your task"` |
 | Global install | `npm install --global portawhip` |

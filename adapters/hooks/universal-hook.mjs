@@ -11,11 +11,11 @@
 import { existsSync } from "node:fs";
 import spawn from "cross-spawn";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { dirname, join, isAbsolute } from "node:path";
+import { dirname, join } from "node:path";
 import { loadIndex, readCachedIndex } from "../../core/registry/registry.mjs";
 import { runRoute } from "../../core/router/route-entry.mjs";
 import { pointerFor } from "../../core/registry/capability-docs.mjs";
-import { loadConfig } from "../../core/state/config.mjs";
+import { loadRuntimeConfig } from "../../core/state/config.mjs";
 import { computeFactors, logEvent, readEvents } from "../../core/state/feedback.mjs";
 import { stackFactors, combineFactors } from "../../core/state/stack-detect.mjs";
 import { readActiveSelection, resolveRecipePaths } from "../../core/state/bundle-state.mjs";
@@ -225,7 +225,7 @@ async function userPrompt(payload, args) {
   // (see core/prompt-hygiene.mjs for the live numbers).
   if (isSyntheticPrompt(prompt)) return;
 
-  const config = loadConfig(CONFIG_PATH);
+  const config = loadRuntimeConfig({ basePath: CONFIG_PATH, cwd: payloadCwd(payload) });
   // Workstream A: a push hook sees only the raw prompt, not the agent's
   // reasoned task summary. The characterization spikes proved no lexical or
   // embedding threshold can reliably separate meta-discussion from a real
@@ -234,8 +234,6 @@ async function userPrompt(payload, args) {
   const pushMode = process.env.PORTAWHIP_PUSH_MODE === "legacy" ? "legacy" : config.pushMode;
   if (pushMode === "silent") return;
   const index = await loadIndex(RECIPE_PATHS);
-  const graphPath =
-    config.graphPath && !isAbsolute(config.graphPath) ? join(ROOT, config.graphPath) : config.graphPath;
   const factors = combineFactors(computeFactors(ROOT), stackFactors(index, payloadCwd(payload)));
   // Dense retrieval (core/dense-embedder.mjs) loads a 500MB+ model on first
   // use - fine for the long-lived MCP server/CLI, but this hook is a fresh
@@ -244,7 +242,6 @@ async function userPrompt(payload, args) {
   // dense is opt-in for callers that can amortize the load across calls.
   const routed = await runRoute(index, prompt, {
     ...config,
-    graphPath,
     factors,
     denseEnabled: false,
     mode: "push",
@@ -321,6 +318,7 @@ function sessionStart() {
   try {
     const child = spawn.spawn(process.execPath, [join(ROOT, "scripts", "sync", "auto-sync.mjs")], {
       cwd: ROOT,
+      env: { ...process.env, PORTAWHIP_PROJECT_ROOT: process.cwd() },
       detached: true,
       stdio: "ignore",
     });

@@ -7,7 +7,7 @@ import { listAll } from "./scorer.mjs";
 import { runRoute } from "./route-entry.mjs";
 import { compileCapabilityGraph, writeCapabilityGraph } from "../registry/capability-graph-compiler.mjs";
 import { runRouterEval, runRouterEvalComparison, loadEvalSet } from "./router-eval.mjs";
-import { loadConfig } from "../state/config.mjs";
+import { loadRuntimeConfig } from "../state/config.mjs";
 import { computeFactors } from "../state/feedback.mjs";
 import { stackFactors, combineFactors } from "../state/stack-detect.mjs";
 import { harvestHardNegatives } from "../registry/eval-harvest.mjs";
@@ -22,6 +22,17 @@ const PACKAGE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 function runtimeFile(path, root = resolveRuntimeRoot(process.cwd(), PACKAGE_ROOT)) {
   if (existsSync(resolve(path))) return path;
   return join(root, path);
+}
+
+function runtimeConfig(args, root) {
+  if (args.config) {
+    return loadRuntimeConfig({
+      basePath: args.config,
+      cwd: process.cwd(),
+      env: { ...process.env, PORTAWHIP_CONFIG: args.config },
+    });
+  }
+  return loadRuntimeConfig({ basePath: runtimeFile("router.config.yaml", root), cwd: process.cwd() });
 }
 
 function parseArgs(argv) {
@@ -75,7 +86,7 @@ async function main() {
       process.exitCode = 1;
       return;
     }
-    const config = loadConfig(args.config ?? runtimeFile("router.config.yaml", root));
+    const config = runtimeConfig(args, root);
     const opts = {
       threshold: args.threshold ? Number(args.threshold) : config.threshold,
       recipeThreshold: args.recipeThreshold ? Number(args.recipeThreshold) : config.recipeThreshold,
@@ -103,7 +114,7 @@ async function main() {
   }
 
   if (command === "eval") {
-    const config = loadConfig(args.config ?? runtimeFile("router.config.yaml", root));
+    const config = runtimeConfig(args, root);
     const opts = {
       threshold: args.threshold ? Number(args.threshold) : config.threshold,
       recipeThreshold: args.recipeThreshold ? Number(args.recipeThreshold) : config.recipeThreshold,
@@ -134,7 +145,7 @@ async function main() {
   }
 
   if (command === "compare") {
-    const config = loadConfig(args.config ?? runtimeFile("router.config.yaml", root));
+    const config = runtimeConfig(args, root);
     console.log(
       JSON.stringify(
         await runRouterEvalComparison(index, config, {

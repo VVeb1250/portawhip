@@ -1,4 +1,7 @@
-# Tunable router defaults. This is data the scorer reads at runtime —
+# Tunable packaged defaults. End users should override these with
+# portawhip config set <key> <value> (user scope) or --scope project;
+# run portawhip config list to inspect the effective layered result.
+# This is data the scorer reads at runtime —
 # not decision logic. Missing file / missing keys fall back to the same
 # defaults shown here (core/state/config.mjs), so this file is optional.
 #
