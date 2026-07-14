@@ -2,6 +2,20 @@
 
 All notable user-facing changes are documented here.
 
+## [0.4.0](https://github.com/VVeb1250/portawhip/compare/portawhip-v0.3.0...portawhip-v0.4.0) (2026-07-14)
+
+
+### Features
+
+* add configuration controls to TUI ([5a56597](https://github.com/VVeb1250/portawhip/commit/5a565974cd09f913b4d2e1c5319365f9e8c72efc))
+* add layered user configuration ([44c4049](https://github.com/VVeb1250/portawhip/commit/44c4049fbd40b9f92185b33644554ee7999d4ecd))
+
+
+### Bug Fixes
+
+* explain TUI settings and improve selection contrast ([e1e37ac](https://github.com/VVeb1250/portawhip/commit/e1e37ace1a02221ced257b398a80bdda8b47e55d))
+* make TUI config inputs type-aware ([ab16869](https://github.com/VVeb1250/portawhip/commit/ab16869295250f334299a8d4a9b4904c19712608))
+
 ## [0.3.0](https://github.com/VVeb1250/portawhip/compare/portawhip-v0.2.1...portawhip-v0.3.0) (2026-07-14)
 
 
