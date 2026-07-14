@@ -106,7 +106,24 @@ test("mergeRulesyncMcp: http transport when config has url", () => {
   assert.equal(json.mcpServers.remote.url, "https://x/y");
 });
 
-test("collectMcpConfigs: blocks conflicting host variants instead of picking the first", () => {
+test("collectMcpConfigs: blocks genuinely divergent host variants instead of picking the first", () => {
+  // A shared env KEY with conflicting VALUES cannot be merged — this must still
+  // block for the user to resolve (a pure env superset, by contrast, now merges;
+  // see rulesync-canonical mergeVariants tests).
+  const result = collectMcpConfigs(["shared"], [
+    { agentType: "claude", servers: [{ serverName: "shared", config: { command: "shared", args: ["mcp"], env: { WORKERS: "4" } } }] },
+    {
+      agentType: "codex",
+      servers: [{ serverName: "shared", config: { command: "shared", args: ["mcp"], env: { WORKERS: "8" } } }],
+    },
+  ]);
+  assert.deepEqual(result.configs, {});
+  assert.equal(result.conflicts.length, 1);
+  assert.equal(result.conflicts[0].name, "shared");
+  assert.deepEqual(result.conflicts[0].keys, ["env.WORKERS"]);
+});
+
+test("collectMcpConfigs: a pure env superset resolves instead of blocking (gortex case)", () => {
   const result = collectMcpConfigs(["shared"], [
     { agentType: "claude", servers: [{ serverName: "shared", config: { command: "shared", args: ["mcp"] } }] },
     {
@@ -114,6 +131,6 @@ test("collectMcpConfigs: blocks conflicting host variants instead of picking the
       servers: [{ serverName: "shared", config: { command: "shared", args: ["mcp"], env: { WORKERS: "8" } } }],
     },
   ]);
-  assert.deepEqual(result.configs, {});
-  assert.deepEqual(result.conflicts, [{ name: "shared", hosts: ["claude", "codex"] }]);
+  assert.deepEqual(result.conflicts, []);
+  assert.deepEqual(result.configs.shared.env, { WORKERS: "8" });
 });

@@ -36,16 +36,6 @@ export function normalizeMcpConfig(input = {}) {
   return { config, warnings: [...env.warnings, ...headers.warnings] };
 }
 
-function stable(value) {
-  if (Array.isArray(value)) return value.map(stable);
-  if (!value || typeof value !== "object") return value;
-  return Object.fromEntries(Object.keys(value).sort().map((key) => [key, stable(value[key])]));
-}
-
-function identity(config) {
-  return JSON.stringify(stable(config));
-}
-
 function isHostPrivateMcp(server) {
   const source = server.config?.server ?? server.config ?? {};
   const command = String(source.command ?? "").replace(/\\/g, "/");
@@ -53,6 +43,49 @@ function isHostPrivateMcp(server) {
     server.serverName === "node_repl" &&
     (/\/OpenAI\/Codex\/runtimes\//i.test(command) || source.env?.SKY_CUA_NATIVE_PIPE === "1")
   );
+}
+
+// Merge N variants of the same server (one per host) into a single canonical
+// config, or report genuine divergence. Resolvable: the identity core
+// (type/command/url/args) is identical everywhere and env/headers union with no
+// conflicting value on a shared key — the gortex case (one host merely adds an
+// env var). Divergent: any identity-core difference, or a shared env/header key
+// whose value disagrees — surfaced (with the exact keys) for the user to pick
+// once at import, never guessed through. Scope/merge are DERIVED from the
+// configs, not a per-server list, so user-loaded tools follow the same rule.
+export function mergeVariants(configs = []) {
+  const divergent = [];
+  const warnings = [];
+  for (const key of ["type", "command", "url", "args"]) {
+    const values = new Set(configs.map((config) => JSON.stringify(config?.[key] ?? null)));
+    if (values.size > 1) divergent.push(key);
+  }
+  const merged = { ...(configs[0] ?? {}) };
+  for (const bag of ["env", "headers"]) {
+    const union = {};
+    const seen = {};
+    for (const config of configs) {
+      for (const [key, value] of Object.entries(config?.[bag] ?? {})) {
+        const encoded = JSON.stringify(value);
+        if (key in seen && seen[key] !== encoded) {
+          if (!divergent.includes(`${bag}.${key}`)) divergent.push(`${bag}.${key}`);
+          continue;
+        }
+        seen[key] = encoded;
+        union[key] = value;
+      }
+    }
+    for (const key of Object.keys(union)) {
+      const inEvery = configs.every((config) => (config?.[bag] ?? {})[key] !== undefined);
+      if (!inEvery && SECRET_KEY.test(key)) {
+        warnings.push(`${bag}.${key} propagated to hosts that did not declare it`);
+      }
+    }
+    if (Object.keys(union).length > 0) merged[bag] = union;
+    else delete merged[bag];
+  }
+  if (divergent.length > 0) return { status: "divergent", keys: divergent };
+  return { status: "resolved", config: merged, warnings };
 }
 
 export function unionMcpServers(agentServers = []) {
@@ -77,12 +110,13 @@ export function unionMcpServers(agentServers = []) {
   const servers = {};
   const conflicts = [];
   for (const [name, variants] of candidates) {
-    const unique = new Map(variants.map((variant) => [identity(variant.config), variant.config]));
-    if (unique.size === 1) {
-      servers[name] = unique.values().next().value;
+    const merged = mergeVariants(variants.map((variant) => variant.config));
+    if (merged.status === "resolved") {
+      servers[name] = merged.config;
+      warnings.push(...merged.warnings.map((warning) => `${name}: ${warning}`));
       continue;
     }
-    conflicts.push({ name, hosts: variants.map((variant) => variant.host) });
+    conflicts.push({ name, hosts: variants.map((variant) => variant.host), keys: merged.keys });
   }
   return { servers, conflicts, warnings };
 }
