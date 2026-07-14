@@ -90,3 +90,13 @@ test("interactive TUI exposes a settings tab and its key map", () => {
   assert.match(source, /const TABS = \[[^\]]*"settings"/);
   assert.match(source, /settings tab: g scope, e edit, u unset/);
 });
+test("every TUI setting explains its purpose and accepted value", () => {
+  const rows = collectConfigRows({ runner: fixtureRunner([]) });
+  assert.ok(rows.length > 0);
+  assert.ok(rows.every((row) => typeof row.description === "string" && row.description.length > 10));
+
+  assert.equal(rows.find((row) => row.key === "engine").inputHint, "allowed: keyword | hybrid");
+  assert.equal(rows.find((row) => row.key === "denseEnabled").inputHint, "allowed: false | true");
+  assert.equal(rows.find((row) => row.key === "denseThreshold").inputHint, "range: 0 to 1");
+  assert.equal(rows.find((row) => row.key === "k").inputHint, "minimum: 1");
+});
