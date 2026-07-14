@@ -1,11 +1,9 @@
-// Router tuning knobs (threshold, k) live in router.config.yaml, not as
-// hardcoded constants in scorer.mjs — PLAN.md Phase 1 spec requires the
-// threshold be "config in recipe header or router.config.yaml".
-
-import { readFileSync, existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { dirname, isAbsolute, join, resolve } from "node:path";
 import * as yaml from "js-yaml";
 
-const DEFAULTS = {
+export const DEFAULTS = {
   engine: "hybrid",
   threshold: 2,
   recipeThreshold: 1,
@@ -15,98 +13,147 @@ const DEFAULTS = {
   graphPath: ".hp-state/capability-graph.json",
   graphBoost: 0.25,
   k: 5,
-  // See router.config.yaml's own comment: a lane where the top match barely
-  // beats the runner-up is diffuse-vocabulary noise, not a genuine pick.
   peakednessRatio: 1.05,
-  // Dense semantic retrieval (core/dense-embedder.mjs, BGE-M3) - on by
-  // default so the zero-setup path (just install, no manual model
-  // management) is the norm for every user, not an opt-in. Callers that
-  // can't amortize a 500MB+ model load across calls (the push hook - see
-  // adapters/hooks/universal-hook.mjs) explicitly pass denseEnabled:false.
   denseEnabled: true,
-  // 0.6, not the more intuitive-looking 0.55 - verified live against
-  // docs/router-eval-set.jsonl (BGE-M3 real model, not simulated): 0.55
-  // let a genuinely irrelevant agent/skill pair through on
-  // "audit why route suggestions are noisy and injected at the wrong time"
-  // (network-config-reviewer/caveman-review, both boosted over the line by
-  // actionAlignmentFactor's "review" match on top of raw cosine ~0.48-0.50
-  // - BGE-M3's ambient similarity floor for unrelated short text, not a
-  // real match). Swept 0.55/0.56/0.58/0.60 - 0.55-0.56 fail, 0.58-0.60 both
-  // clean (falsePositiveCount 0, precisionAt1/recallAt3 still 1) - a real
-  // plateau, not one lucky number. Picked 0.60 for extra margin over the
-  // 0.58 edge.
   denseThreshold: 0.6,
-  // Raw-prompt push has no reasoning signal, so it cannot reliably
-  // distinguish topical discussion from an actionable capability request.
-  // Keep unsolicited routing silent by default. "legacy" is an explicit
-  // rollback mode for installations that still want the old push behavior.
   pushMode: "silent",
-  // See router.config.yaml's own comment for the 320 -> 640 rationale
-  // (actionDirective()'s mcp/ToolSearch clause cost, paid at most once per
-  // id per session since repeats render tersely) - kept in sync here so a
-  // project with no router.config.yaml at all still gets the same fix.
   pushBudgetChars: 640,
-  // Push (unsolicited injection) needs much higher precision than pull
-  // (Claude asked via MCP route()) - advisory-systems literature calls the
-  // failure mode alert fatigue: interruptions that are wrong even
-  // occasionally get tuned out entirely, killing the channel. Hits below
-  // this calibrated confidence are dropped from push output unless they are
-  // required-tier (curated recipe entries, deliberately authored triggers).
-  // Pull is unaffected - recall stays generous when the caller asked.
   pushMinConfidence: 0.75,
-  // Interrupt budget: how many times one capability may be rendered per
-  // session before going silent (full line, then terse reminder, then
-  // nothing). An assistant that reminds twice and then shuts up.
   pushMaxMentionsPerSession: 2,
-  // Auto-sync is gated off until manual project + fake-HOME global reconcile
-  // pass and host SessionStart hooks are live-probed. When explicitly enabled,
-  // it calls the same guarded reconciler and never auto-imports.
   autoSync: { enabled: false, throttleMinutes: 60 },
 };
 
-export function loadConfig(path = "router.config.yaml") {
-  if (!existsSync(path)) return { ...DEFAULTS };
-  const raw = yaml.load(readFileSync(path, "utf8")) ?? {};
+export const CONFIG_DEFINITIONS = {
+  engine: { type: "enum", values: ["keyword", "hybrid"] },
+  threshold: { type: "number", min: 0 },
+  recipeThreshold: { type: "number", min: 0 },
+  hybridThreshold: { type: "number", min: 0 },
+  hybridRecipeThreshold: { type: "number", min: 0 },
+  hybridToolThreshold: { type: "number", min: 0 },
+  graphPath: { type: "string" },
+  graphBoost: { type: "number", min: 0 },
+  k: { type: "integer", min: 1 },
+  peakednessRatio: { type: "number", min: 1 },
+  denseEnabled: { type: "boolean" },
+  denseThreshold: { type: "number", min: 0, max: 1 },
+  pushMode: { type: "enum", values: ["silent", "legacy"] },
+  pushBudgetChars: { type: "integer", min: 1 },
+  pushMinConfidence: { type: "number", min: 0, max: 1 },
+  pushMaxMentionsPerSession: { type: "integer", min: 0 },
+  "autoSync.enabled": { type: "boolean" },
+  "autoSync.throttleMinutes": { type: "number", min: 0 },
+};
+
+function readConfigDocument(path) {
+  if (!path || !existsSync(path)) return {};
+  try {
+    const raw = yaml.load(readFileSync(path, "utf8")) ?? {};
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) throw new Error("top level must be a mapping");
+    return raw;
+  } catch (error) {
+    throw new Error("cannot read portawhip config " + path + ": " + error.message);
+  }
+}
+
+function normalizeConfig(raw) {
   return {
-    engine: raw.engine === "keyword" || raw.engine === "hybrid" ? raw.engine : DEFAULTS.engine,
+    engine: ["keyword", "hybrid"].includes(raw.engine) ? raw.engine : DEFAULTS.engine,
     threshold: typeof raw.threshold === "number" ? raw.threshold : DEFAULTS.threshold,
-    recipeThreshold:
-      typeof raw.recipeThreshold === "number" ? raw.recipeThreshold : DEFAULTS.recipeThreshold,
-    hybridThreshold:
-      typeof raw.hybridThreshold === "number" ? raw.hybridThreshold : DEFAULTS.hybridThreshold,
-    hybridRecipeThreshold:
-      typeof raw.hybridRecipeThreshold === "number"
-        ? raw.hybridRecipeThreshold
-        : DEFAULTS.hybridRecipeThreshold,
-    hybridToolThreshold:
-      typeof raw.hybridToolThreshold === "number" ? raw.hybridToolThreshold : DEFAULTS.hybridToolThreshold,
-    graphPath:
-      typeof raw.graphPath === "string" && raw.graphPath.trim() ? raw.graphPath : DEFAULTS.graphPath,
+    recipeThreshold: typeof raw.recipeThreshold === "number" ? raw.recipeThreshold : DEFAULTS.recipeThreshold,
+    hybridThreshold: typeof raw.hybridThreshold === "number" ? raw.hybridThreshold : DEFAULTS.hybridThreshold,
+    hybridRecipeThreshold: typeof raw.hybridRecipeThreshold === "number" ? raw.hybridRecipeThreshold : DEFAULTS.hybridRecipeThreshold,
+    hybridToolThreshold: typeof raw.hybridToolThreshold === "number" ? raw.hybridToolThreshold : DEFAULTS.hybridToolThreshold,
+    graphPath: typeof raw.graphPath === "string" && raw.graphPath.trim() ? raw.graphPath : DEFAULTS.graphPath,
     graphBoost: typeof raw.graphBoost === "number" ? raw.graphBoost : DEFAULTS.graphBoost,
     k: typeof raw.k === "number" ? raw.k : DEFAULTS.k,
-    peakednessRatio:
-      typeof raw.peakednessRatio === "number" ? raw.peakednessRatio : DEFAULTS.peakednessRatio,
+    peakednessRatio: typeof raw.peakednessRatio === "number" ? raw.peakednessRatio : DEFAULTS.peakednessRatio,
     denseEnabled: typeof raw.denseEnabled === "boolean" ? raw.denseEnabled : DEFAULTS.denseEnabled,
-    denseThreshold:
-      typeof raw.denseThreshold === "number" ? raw.denseThreshold : DEFAULTS.denseThreshold,
-    pushMode: raw.pushMode === "legacy" || raw.pushMode === "silent" ? raw.pushMode : DEFAULTS.pushMode,
-    pushBudgetChars:
-      typeof raw.pushBudgetChars === "number" ? raw.pushBudgetChars : DEFAULTS.pushBudgetChars,
-    pushMinConfidence:
-      typeof raw.pushMinConfidence === "number" ? raw.pushMinConfidence : DEFAULTS.pushMinConfidence,
-    pushMaxMentionsPerSession:
-      typeof raw.pushMaxMentionsPerSession === "number"
-        ? raw.pushMaxMentionsPerSession
-        : DEFAULTS.pushMaxMentionsPerSession,
+    denseThreshold: typeof raw.denseThreshold === "number" ? raw.denseThreshold : DEFAULTS.denseThreshold,
+    pushMode: ["legacy", "silent"].includes(raw.pushMode) ? raw.pushMode : DEFAULTS.pushMode,
+    pushBudgetChars: typeof raw.pushBudgetChars === "number" ? raw.pushBudgetChars : DEFAULTS.pushBudgetChars,
+    pushMinConfidence: typeof raw.pushMinConfidence === "number" ? raw.pushMinConfidence : DEFAULTS.pushMinConfidence,
+    pushMaxMentionsPerSession: typeof raw.pushMaxMentionsPerSession === "number" ? raw.pushMaxMentionsPerSession : DEFAULTS.pushMaxMentionsPerSession,
     autoSync: normalizeAutoSync(raw.autoSync),
   };
+}
+
+export function userConfigPath({ home = homedir(), env = process.env, platform = process.platform } = {}) {
+  if (env.PORTAWHIP_CONFIG) return resolve(env.PORTAWHIP_CONFIG);
+  const configHome = platform === "win32"
+    ? env.APPDATA || join(home, "AppData", "Roaming")
+    : env.XDG_CONFIG_HOME || join(home, ".config");
+  return resolve(configHome, "portawhip", "config.yaml");
+}
+
+export function projectConfigPath(cwd = process.cwd()) {
+  return resolve(cwd, ".portawhip", "config.yaml");
+}
+
+export function loadRuntimeConfig({ basePath = null, cwd = process.cwd(), home = homedir(), env = process.env, platform = process.platform } = {}) {
+  const standardEnv = { ...env };
+  delete standardEnv.PORTAWHIP_CONFIG;
+  const paths = [
+    basePath ? resolve(basePath) : null,
+    userConfigPath({ home, env: standardEnv, platform }),
+    projectConfigPath(cwd),
+    env.PORTAWHIP_CONFIG ? resolve(env.PORTAWHIP_CONFIG) : null,
+  ].filter(Boolean);
+  let raw = {};
+  let graphSource = null;
+  for (const path of [...new Set(paths)]) {
+    if (!existsSync(path)) continue;
+    const layer = readConfigDocument(path);
+    raw = {
+      ...raw,
+      ...layer,
+      autoSync: { ...(raw.autoSync ?? {}), ...(layer.autoSync ?? {}) },
+    };
+    if (typeof layer.graphPath === "string" && layer.graphPath.trim()) graphSource = path;
+  }
+  const config = normalizeConfig(raw);
+  if (graphSource && !isAbsolute(config.graphPath)) config.graphPath = resolve(dirname(graphSource), config.graphPath);
+  return config;
+}
+
+export function loadConfig(path = "router.config.yaml") {
+  if (!existsSync(path)) return { ...DEFAULTS, autoSync: { ...DEFAULTS.autoSync } };
+  return normalizeConfig(readConfigDocument(path));
+}
+
+export function configKeys() {
+  return Object.keys(CONFIG_DEFINITIONS);
+}
+
+export function parseConfigValue(key, rawValue) {
+  const definition = CONFIG_DEFINITIONS[key];
+  if (!definition) throw new Error("unknown config key " + JSON.stringify(key) + ". Valid keys: " + configKeys().join(", "));
+  let value;
+  if (definition.type === "boolean") {
+    if (!["true", "false"].includes(rawValue)) throw new Error(key + " must be true or false");
+    value = rawValue === "true";
+  } else if (definition.type === "number" || definition.type === "integer") {
+    if (String(rawValue).trim() === "" || !Number.isFinite(Number(rawValue))) throw new Error(key + " must be a number");
+    value = Number(rawValue);
+    if (definition.type === "integer" && !Number.isInteger(value)) throw new Error(key + " must be an integer");
+  } else if (definition.type === "enum") {
+    if (!definition.values.includes(rawValue)) throw new Error(key + " must be one of: " + definition.values.join(", "));
+    value = rawValue;
+  } else {
+    if (!String(rawValue).trim()) throw new Error(key + " must not be empty");
+    value = String(rawValue);
+  }
+  if (definition.min != null && definition.max != null && (value < definition.min || value > definition.max)) {
+    throw new Error(key + " must be between " + definition.min + " and " + definition.max);
+  }
+  if (definition.min != null && value < definition.min) throw new Error(key + " must be at least " + definition.min);
+  if (definition.max != null && value > definition.max) throw new Error(key + " must be at most " + definition.max);
+  return value;
 }
 
 function normalizeAutoSync(raw) {
   if (!raw || typeof raw !== "object") return { ...DEFAULTS.autoSync };
   return {
     enabled: typeof raw.enabled === "boolean" ? raw.enabled : DEFAULTS.autoSync.enabled,
-    throttleMinutes:
-      typeof raw.throttleMinutes === "number" ? raw.throttleMinutes : DEFAULTS.autoSync.throttleMinutes,
+    throttleMinutes: typeof raw.throttleMinutes === "number" ? raw.throttleMinutes : DEFAULTS.autoSync.throttleMinutes,
   };
 }

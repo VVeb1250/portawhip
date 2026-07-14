@@ -21,7 +21,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync, rmSync, appendFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { loadConfig } from "../../core/state/config.mjs";
+import { loadRuntimeConfig } from "../../core/state/config.mjs";
 import { runReconcile } from "./reconcile.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
@@ -96,7 +96,10 @@ async function fanOut() {
 }
 
 export async function runAutoSync({ now = Date.now(), config = null, fanOutImpl = fanOut } = {}) {
-  const cfg = config ?? loadConfig(join(ROOT, "router.config.yaml"));
+  const cfg = config ?? loadRuntimeConfig({
+    basePath: join(ROOT, "router.config.yaml"),
+    cwd: process.env.PORTAWHIP_PROJECT_ROOT || process.cwd(),
+  });
   const auto = cfg.autoSync ?? {};
   if (auto.enabled !== true) return { skipped: "disabled" };
 

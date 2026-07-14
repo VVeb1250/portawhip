@@ -98,6 +98,30 @@ npx --yes portawhip
 ```
 
 Use the TUI to review inventory, connector and hook status, and config-sync previews before applying changes. Global connector and hook changes are a trust boundary: back up host configuration first. Portawhip does not silently activate third-party embedded hooks.
+### Configure Portawhip
+
+The packaged defaults are now overridable without cloning or editing the npm package:
+
+    # Inspect the effective merged configuration
+    npx --yes portawhip config list
+
+    # Persist a preference for this user
+    npx --yes portawhip config set denseEnabled false
+
+    # Override it only in the current project
+    npx --yes portawhip config set denseEnabled true --scope project
+
+    # Return to the inherited value
+    npx --yes portawhip config unset denseEnabled --scope project
+
+Configuration is layered from lowest to highest priority:
+
+1. packaged <code>router.config.yaml</code>
+2. user config (<code>%APPDATA%portawhipconfig.yaml</code> on Windows, <code>$XDG_CONFIG_HOME/portawhip/config.yaml</code> or <code>~/.config/portawhip/config.yaml</code> elsewhere)
+3. <code>&lt;project&gt;/.portawhip/config.yaml</code>
+4. the file named by <code>PORTAWHIP_CONFIG</code>
+
+Use <code>portawhip config get &lt;key&gt;</code>, <code>list</code>, <code>set</code>, <code>unset</code>, or <code>path</code>; add <code>--json</code> for machine-readable output. Values are type- and range-checked before writes. Run <code>portawhip config --help</code> for the full command reference.
 
 ## How it works
 
@@ -123,6 +147,8 @@ The loader delegates installation to maintained tools (`add-mcp`, `mise`, and `a
 | Goal | Command |
 | --- | --- |
 | Interactive TUI | `npx --yes portawhip` |
+| Show effective configuration | <code>npx --yes portawhip config list</code> |
+| Set a user preference | <code>npx --yes portawhip config set &lt;key&gt; &lt;value&gt;</code> |
 | List discovered skills | `npx --yes --package=portawhip -- portawhip-router list --type skill` |
 | Route a task | `npx --yes --package=portawhip -- portawhip-router route --prompt "your task"` |
 | Global install | `npm install --global portawhip` |
