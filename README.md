@@ -57,7 +57,7 @@ AI agent setups drift quickly: one host knows about an MCP server, another has t
 npx --yes portawhip
 ```
 
-The six tabs cover overview, config sync, connectors, hooks, enrichment, and the capability catalog. Press `h` or `?` for the key map. Repair/remove actions require a second keypress.
+The seven tabs cover overview, config sync, connectors, hooks, enrichment, the capability catalog, and router settings. Press `7` to configure user/project overrides, or `h`/`?` for the full key map. Config writes and repair/remove actions require confirmation.
 
 ### 2. Router CLI
 
@@ -98,9 +98,10 @@ npx --yes portawhip
 ```
 
 Use the TUI to review inventory, connector and hook status, and config-sync previews before applying changes. Global connector and hook changes are a trust boundary: back up host configuration first. Portawhip does not silently activate third-party embedded hooks.
+
 ### Configure Portawhip
 
-The packaged defaults are now overridable without cloning or editing the npm package:
+The packaged defaults are now overridable without cloning or editing the npm package. In the TUI, press `7`, choose user/project scope with `g`, select a setting, then press `e` to edit or `u` twice to unset:
 
     # Inspect the effective merged configuration
     npx --yes portawhip config list
