@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { parseArgs, runReconcile } from "./reconcile.mjs";
@@ -34,9 +34,14 @@ test("reconcile: parses safe manual commands and guards apply", () => {
 
 test("reconcile: check reports rulesync drift without writing", async () => {
   const calls = [];
+  // A Windows-style "C:/work/project" root only resolves as absolute on
+  // Windows - on Linux/macOS `resolve()` treats it as a relative segment and
+  // prepends cwd, which is what CI caught. Use `resolve()` itself to build a
+  // root that's genuinely absolute on whatever OS the test runs on.
+  const root = resolve("work-project-fixture");
   const result = await runReconcile({
     command: "check",
-    root: "C:/work/project",
+    root,
     runner: (_command, args) => {
       calls.push(args);
       return { status: 1, stdout: rulesyncJson([".mcp.json"], true), stderr: "" };
@@ -44,7 +49,7 @@ test("reconcile: check reports rulesync drift without writing", async () => {
   });
   assert.equal(result.status, "drift");
   assert.deepEqual(calls[0].slice(-3), ["--json", "generate", "--dry-run"]);
-  assert.equal(result.targets[0], "C:\\work\\project\\.mcp.json");
+  assert.equal(result.targets[0], resolve(root, ".mcp.json"));
 });
 
 test("reconcile: apply backs up, writes, verifies, and records ownership", async () => {
