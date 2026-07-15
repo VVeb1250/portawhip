@@ -11,6 +11,7 @@ import { z } from "zod";
 import { loadIndex } from "../core/registry/registry.mjs";
 import { listAll } from "../core/router/scorer.mjs";
 import { compactRouteResult, explainRoute } from "../core/router/route-entry.mjs";
+import { createSessionLedger, logPullEmissions } from "../core/router/session-ledger.mjs";
 import { loadRuntimeConfig } from "../core/state/config.mjs";
 import { computeFactors, logEvent } from "../core/state/feedback.mjs";
 import { stackFactors, combineFactors } from "../core/state/stack-detect.mjs";
@@ -34,6 +35,7 @@ const RECIPE_PATHS = resolveRecipePaths(ROOT, readActiveSelection(ROOT));
 const CONFIG_PATH = join(ROOT, "router.config.yaml");
 
 const server = new McpServer({ name: "harness-router", version: "0.0.1" });
+const sessionLedger = createSessionLedger({ feedbackRoot: FEEDBACK_ROOT });
 
 server.tool(
   "route",
@@ -42,7 +44,8 @@ server.tool(
     "Drop chit-chat, venting, background, and any rejected, negated, or hypothetical option. " +
     "If a request is buried in chat, route only the request; if the message names several distinct actions, call route once per action. " +
     "Example: 'ugh CI is flaky, anyway find where we parse the auth token' -> query 'find the code that parses the auth token'. " +
-    "Returns pointers, not full content. An empty result is expected and means nothing installed fits.",
+    "Returns candidates, not commands; pick or ignore each one without justification. " +
+    "Results carry pointers, not full content. An empty result is expected and means nothing installed fits.",
   { query: z.string(), k: z.number().optional() },
   async ({ query, k }) => {
     const index = await loadIndex(RECIPE_PATHS);
@@ -59,6 +62,7 @@ server.tool(
       denseBlock: false,
       mode: "pull",
     });
+    const compact = compactRouteResult(result, { ledger: sessionLedger });
     logEvent(FEEDBACK_ROOT, {
       type: "route",
       engine: config.engine,
@@ -75,12 +79,8 @@ server.tool(
     // relevance signal) but never counts an unused pull result as an
     // "ignored" outcome. Pull is recall-generous by design; punishing
     // unclicked results would recreate the noise-decay bug at this layer.
-    for (const hit of result.results) {
-      // The reasoned summary may contain sensitive task context. Outcome
-      // attribution only needs capability id + source, so never persist it.
-      logEvent(FEEDBACK_ROOT, { type: "suggested", id: hit.id, source: "pull" });
-    }
-    return { content: [{ type: "text", text: JSON.stringify(compactRouteResult(result)) }] };
+    logPullEmissions(FEEDBACK_ROOT, compact.results);
+    return { content: [{ type: "text", text: JSON.stringify(compact) }] };
   },
 );
 

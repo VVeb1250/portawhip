@@ -5,6 +5,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { buildIndex, readRawEntries } from "./registry.mjs";
+import { discoverCli } from "./discover.mjs";
+import { mergeEnrichmentRecords } from "./enrich.mjs";
 import { normalizeTriggerSpec } from "./trigger-spec.mjs";
 import { route } from "../router/scorer.mjs";
 
@@ -37,6 +39,56 @@ test("trigger specs: discovery fallbacks always provide at least three positive 
 
   assert.ok(spec.triggers.length >= 3);
   assert.ok(spec.triggers.includes("use example-tool"));
+});
+
+test("trigger specs: refresh enrichment preserves existing negative guidance", () => {
+  const merged = mergeEnrichmentRecords(
+    {
+      codegraph: {
+        type: "mcp",
+        description: "old",
+        triggers: ["codegraph", "trace callers", "call paths"],
+        skipWhen: ["plain text search"],
+      },
+    },
+    {
+      codegraph: {
+        type: "mcp",
+        description: "refreshed",
+        triggers: ["codegraph", "trace callers", "call paths"],
+      },
+    },
+  );
+
+  assert.equal(merged.codegraph.description, "refreshed");
+  assert.deepEqual(merged.codegraph.skipWhen, ["plain text search"]);
+});
+
+test("trigger specs: skipWhen survives enrichment-cache discovery", () => {
+  const root = mkdtempSync(join(tmpdir(), "portawhip-trigger-enrich-"));
+  const cache = join(root, "tool-descriptions.json");
+  writeFileSync(
+    cache,
+    JSON.stringify({
+      "example-tool": {
+        type: "cli",
+        description: "CLI tool: example-tool ? inspect example data",
+        triggers: ["example-tool", "inspect example data", "query example data"],
+        skipWhen: ["production mutations"],
+      },
+    }),
+  );
+
+  try {
+    const entries = discoverCli(cache, () => ({
+      status: 0,
+      stdout: JSON.stringify({ "example-tool": [] }),
+    }));
+    assert.deepEqual(entries[0].route.skipWhen, ["production mutations"]);
+    assert.ok(entries[0].route.triggers.length >= 3);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });
 
 test("trigger specs: skipWhen parses, survives indexing, and never filters retrieval", async () => {

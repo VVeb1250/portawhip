@@ -6,6 +6,7 @@ import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
 import { dirname, resolve, join } from "node:path";
 import * as yaml from "js-yaml";
 import { discoverAll } from "./discover.mjs";
+import { normalizeTriggerSpec } from "./trigger-spec.mjs";
 
 // Cache lives next to whichever recipe.yaml was actually loaded — not cwd —
 // so this still works when called from a globally-registered MCP server
@@ -34,6 +35,14 @@ function validateRoute(entry) {
       throw new Error(`${entry.id}: route.triggers must all be non-empty strings`);
     }
   }
+  if (r.skipWhen !== undefined && !Array.isArray(r.skipWhen)) {
+    throw new Error(`${entry.id}: route.skipWhen must be an array when provided`);
+  }
+  for (const clause of r.skipWhen ?? []) {
+    if (typeof clause !== "string" || clause.trim() === "") {
+      throw new Error(`${entry.id}: route.skipWhen must contain only non-empty strings`);
+    }
+  }
   if (typeof r.description !== "string" || r.description.trim() === "") {
     throw new Error(`${entry.id}: route.description is required and must be a non-empty string`);
   }
@@ -50,7 +59,13 @@ function validateRoute(entry) {
     throw new Error(`${entry.id}: route.action must be a string`);
   }
   return {
-    triggers: r.triggers,
+    triggers: normalizeTriggerSpec({
+      id: entry.id,
+      type: entry.type,
+      triggers: r.triggers,
+      skipWhen: r.skipWhen,
+    }).triggers,
+    skipWhen: r.skipWhen ?? [],
     description: r.description,
     when: Array.isArray(r.when) && r.when.length > 0 ? r.when : ["user_prompt"],
     inject: r.inject === "full" ? "full" : "hint",

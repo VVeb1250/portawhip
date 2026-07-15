@@ -9,6 +9,7 @@
   route:
     triggers: ["lint javascript", "biome", "format typescript", "lint frontend code", "js formatter"]
     description: "Lint and format JS/TS/JSON (fast, single binary)"
+    skipWhen: ["non-JavaScript language formatting", "runtime behavior debugging"]
     when: [user_prompt]
     inject: hint
     binary: biome

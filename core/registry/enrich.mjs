@@ -199,6 +199,23 @@ function discoveredCliIds() {
   }
 }
 
+export function mergeEnrichmentRecords(...groups) {
+  const merged = {};
+  for (const group of groups) {
+    for (const [id, record] of Object.entries(group ?? {})) {
+      const previous = merged[id] ?? {};
+      merged[id] = {
+        ...previous,
+        ...record,
+        ...(record?.skipWhen === undefined && previous.skipWhen !== undefined
+          ? { skipWhen: previous.skipWhen }
+          : {}),
+      };
+    }
+  }
+  return merged;
+}
+
 export async function runEnrichment({ cachePath = DEFAULT_CACHE_PATH, cliIds = null, timeoutMs = 8000, cliLadder = true } = {}) {
   const existing = readEnrichmentCache(cachePath);
   const mcp = await enrichMcp({ timeoutMs });
@@ -207,7 +224,7 @@ export async function runEnrichment({ cachePath = DEFAULT_CACHE_PATH, cliIds = n
   // legacy --help/pip-only sync path if the ladder is explicitly disabled.
   const ids = cliIds ?? discoveredCliIds();
   const cli = cliLadder ? await enrichCliLadder(ids, { timeoutMs }) : enrichCli(ids);
-  const merged = { ...existing, ...mcp, ...cli };
+  const merged = mergeEnrichmentRecords(existing, mcp, cli);
   writeEnrichmentCache(merged, cachePath);
   return merged;
 }

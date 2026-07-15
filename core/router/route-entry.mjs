@@ -22,22 +22,32 @@ export async function runRoute(index, prompt, config) {
   return annotateIntentEvidence(index, prompt, candidates, { mode: config.mode });
 }
 
+function compactSkipWhen(hit) {
+  if (typeof hit.skip_when === "string" && hit.skip_when.trim()) return hit.skip_when.trim();
+  if (!Array.isArray(hit.skipWhen)) return null;
+  const clauses = hit.skipWhen.filter((clause) => typeof clause === "string" && clause.trim());
+  return clauses.length > 0 ? clauses.join("; ") : null;
+}
+
 function compactHit(hit) {
   return Object.fromEntries(
     [
       ["id", hit.id],
       ["type", hit.type],
+      ["kind", hit.kind],
+      ["state", hit.state],
       ["tier", hit.tier],
       ["action", hit.action],
       ["how_to_use", hit.how_to_use],
       ["pointer", hit.pointer],
+      ["skip_when", compactSkipWhen(hit)],
       ["readyMarker", hit.readyMarker],
       ["readyHint", hit.readyHint],
     ].filter(([, value]) => value !== null && value !== undefined),
   );
 }
 
-export function compactRouteResult(result) {
+export function compactRouteResult(result, { ledger = null } = {}) {
   if (result.status !== "success" || result.results.length === 0) {
     return {
       status: "empty",
@@ -48,9 +58,17 @@ export function compactRouteResult(result) {
     };
   }
 
+  const compactedResults = result.results.map((hit) => compactHit({ ...hit, state: hit.state ?? "fresh" }));
+  const emittedResults = ledger ? ledger.emit(compactedResults) : compactedResults;
+  if (emittedResults.length === 0) {
+    return { status: "empty", reason: "matching capabilities were muted for this session" };
+  }
+  const recognitionSet = emittedResults.length > 1 || emittedResults.some((hit) => hit.state !== "fresh");
+
   return {
     status: "success",
-    results: result.results.map(compactHit),
+    ...(recognitionSet ? { mode: "candidates", note: "candidates - pick what fits, ignoring all is fine" } : {}),
+    results: emittedResults,
   };
 }
 

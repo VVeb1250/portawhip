@@ -12,6 +12,7 @@
   route:
     triggers: ["secret scan", "gitleaks", "leaked credentials", "hardcoded secret", "api key in code"]
     description: "Scan for hardcoded secrets/credentials before they get committed"
+    skipWhen: ["dependency vulnerability lookup", "non-secret code quality review"]
     when: [user_prompt]
     inject: hint
     binary: gitleaks
@@ -22,6 +23,7 @@
   route:
     triggers: ["vulnerability scan", "osv-scanner", "dependency vulnerabilities", "cve check", "supply chain"]
     description: "Scan dependencies for known vulnerabilities (OSV database)"
+    skipWhen: ["hardcoded secret detection", "application logic security review"]
     when: [user_prompt]
     inject: hint
     binary: osv-scanner

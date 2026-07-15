@@ -20,6 +20,7 @@ import { computeFactors, logEvent, readEvents } from "../../core/state/feedback.
 import { stackFactors, combineFactors } from "../../core/state/stack-detect.mjs";
 import { readActiveSelection, resolveRecipePaths } from "../../core/state/bundle-state.mjs";
 import { isSyntheticPrompt } from "../../core/router/prompt-hygiene.mjs";
+import { emissionState, REUSE_NOTE } from "../../core/router/session-ledger.mjs";
 
 const ROOT = dirname(dirname(dirname(fileURLToPath(import.meta.url))));
 // Whatever bundles were opted into via `scripts/bundles.mjs select` (foundry
@@ -129,10 +130,11 @@ function formatBlock(result, budgetChars, cwd, host, mentionCounts, maxMentions)
   let used = 0;
   for (const hit of result) {
     const mentions = mentionCounts.get(hit.id) ?? 0;
-    if (mentions >= maxMentions) continue; // interrupt budget spent for this session
+    const state = emissionState({ timesSuggested: mentions, used: false });
+    if (state === "mute" || mentions >= maxMentions) continue; // interrupt budget spent for this session
     const line =
-      mentions > 0
-        ? `- ${hit.id} - still relevant, use it again if applicable`
+      state === "reuse"
+        ? `- ${hit.id} - ${REUSE_NOTE}`
         : `- ${hit.id} - ${hit.how_to_use}${readinessNote(hit, cwd)} - ${actionDirective(hit, host)}`;
     if (used + line.length > budgetChars && lines.length > 0) break;
     lines.push(line);

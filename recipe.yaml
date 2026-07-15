@@ -7,6 +7,7 @@
   route:
     triggers: ["library docs", "api docs", "documentation", "how to use", "sdk usage", "package docs"]
     description: "Fetch current docs/examples for a library, framework, or API"
+    skipWhen: ["local code symbols or call paths", "non-technical tasks"]
     when: [user_prompt]
     inject: hint
 
@@ -16,6 +17,7 @@
   route:
     triggers: ["search codebase", "grep", "find text in files", "regex search"]
     description: "Fast regex search across files"
+    skipWhen: ["symbol caller or dependency tracing", "binary document extraction"]
     when: [user_prompt]
     inject: hint
     binary: rg
@@ -33,6 +35,7 @@
   route:
     triggers: ["pdf", "merge pages", "ocr", "extract table"]
     description: "Read/merge/split/OCR PDF files"
+    skipWhen: ["plain text or markdown files", "spreadsheet or slide editing"]
     when: [user_prompt]
     inject: hint
 
@@ -48,6 +51,7 @@
   route:
     triggers: ["codegraph", "code graph", "call graph", "blast radius", "symbol graph"]
     description: "MCP server: codebase knowledge graph (symbols, edges, call paths)"
+    skipWhen: ["plain text search", "non-code documents"]
     when: [user_prompt]
     inject: hint
     readyMarker: ".codegraph"
@@ -72,6 +76,7 @@
         "improve the router",
       ]
     description: "Inspect or improve this repo's harness-router/portawhip routing source"
+    skipWhen: ["using an installed capability without changing the router", "unrelated product routing"]
     when: [user_prompt]
     inject: hint
     action: inspect_code
@@ -99,6 +104,7 @@
         "import newly installed",
       ]
     description: "Manage portawhip cross-host capability sync: import, enrich, check coverage, fan out to all hosts"
+    skipWhen: ["ordinary application feature work", "single-host local-only configuration"]
     when: [user_prompt]
     inject: hint
     action: read_skill
@@ -121,6 +127,7 @@
         "harness surface",
       ]
     description: "Audit the active repo, MCP servers, connectors, hooks, plugins, and ECC harness surface"
+    skipWhen: ["implementing application features", "invoking one already-known tool"]
     when: [user_prompt]
     inject: hint
     action: read_skill
@@ -142,6 +149,7 @@
         "claude codex drift",
       ]
     description: "Sole steady-state fan-out writer for project and global host configuration"
+    skipWhen: ["one-off capability use", "reading configuration without syncing it"]
     when: [user_prompt]
     inject: hint
     action: run_sync_config
@@ -160,6 +168,7 @@
         "sync skills",
       ]
     description: "Probe or install skills only for long-tail hosts rulesync cannot target"
+    skipWhen: ["hosts already covered by rulesync", "non-skill configuration surfaces"]
     when: [user_prompt]
     inject: hint
     action: run_sync_config_status
@@ -182,6 +191,7 @@
         "fix config",
       ]
     description: "Configure or repair ECC/Codex/Claude harness config, hooks, settings, and MCP wiring"
+    skipWhen: ["application runtime configuration", "ordinary source-code changes"]
     when: [user_prompt]
     inject: hint
     action: read_skill
@@ -202,6 +212,7 @@
         "fix bug and run tests",
       ]
     description: "Run build/test/lint/security verification after code changes and before commits"
+    skipWhen: ["read-only explanation with no code changes", "work that has not reached verification"]
     when: [user_prompt]
     inject: hint
     action: read_skill
@@ -221,6 +232,7 @@
         "pull request review",
       ]
     description: "Review changed code for bugs, regressions, missing tests, and maintainability before commit"
+    skipWhen: ["implementing the requested change", "non-code document review"]
     when: [user_prompt]
     inject: hint
     action: review_code

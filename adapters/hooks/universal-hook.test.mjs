@@ -103,7 +103,7 @@ test("universal-hook: user_prompt renders tersely once a capability was already 
     assert.match(first.hookSpecificOutput.additionalContext, /run it directly now/);
 
     const second = JSON.parse(runHook(args, payload, { env: LEGACY_PUSH_ENV }));
-    assert.match(second.hookSpecificOutput.additionalContext, /- ripgrep - still relevant, use it again/);
+    assert.match(second.hookSpecificOutput.additionalContext, /- ripgrep - already available - reuse it/);
     assert.doesNotMatch(second.hookSpecificOutput.additionalContext, /run it directly now/);
   } finally {
     restoreFeedback();
@@ -209,7 +209,7 @@ test("universal-hook: third mention of the same id in one session is silent (int
     const first = JSON.parse(runHook(args, payload, { env: LEGACY_PUSH_ENV }));
     assert.match(first.hookSpecificOutput.additionalContext, /run it directly now/);
     const second = JSON.parse(runHook(args, payload, { env: LEGACY_PUSH_ENV }));
-    assert.match(second.hookSpecificOutput.additionalContext, /still relevant/);
+    assert.match(second.hookSpecificOutput.additionalContext, /already available - reuse it/);
     // Budget (pushMaxMentionsPerSession=2) spent: full once, terse once, then silence.
     const third = runHook(args, payload, { env: LEGACY_PUSH_ENV });
     assert.equal(third, "");

@@ -9,6 +9,7 @@
   route:
     triggers: ["convert document", "pandoc", "markdown to pdf", "docx to markdown", "document format conversion"]
     description: "Convert between document formats (markdown, docx, pdf, html, and more)"
+    skipWhen: ["OCR or binary-office extraction", "editing document content"]
     when: [user_prompt]
     inject: hint
     binary: pandoc
@@ -26,6 +27,7 @@
   route:
     triggers: ["convert to markdown", "markitdown", "extract text from pdf", "docx to text", "read office document"]
     description: "Convert docx/pptx/xlsx/pdf/images to markdown for LLM-friendly reading"
+    skipWhen: ["markup-to-markup publishing conversion", "editing source documents"]
     when: [user_prompt]
     inject: hint
     binary: markitdown

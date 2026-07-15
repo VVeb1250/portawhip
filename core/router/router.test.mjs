@@ -239,17 +239,19 @@ test("compactRouteResult: emits only actionable fields for successful routes", (
     latency_ms: 12,
   });
 
-  assert.deepEqual(result, {
-    status: "success",
-    results: [{
-      id: "pdf",
-      type: "skill",
-      tier: "required",
-      action: "read_skill",
-      how_to_use: "Read and edit PDF files.",
-      pointer: "/skills/pdf",
-    }],
-  });
+  assert.equal(result.status, "success");
+  assert.deepEqual(result.results, [{
+    id: "pdf",
+    type: "skill",
+    kind: "skill",
+    state: "fresh",
+    tier: "required",
+    action: "read_skill",
+    how_to_use: "Read and edit PDF files.",
+    pointer: "/skills/pdf",
+  }]);
+  assert.ok(!("score" in result.results[0]));
+  assert.ok(!("confidence" in result.results[0]));
 });
 
 test("compactRouteResult: empty routes contain only status and reason", () => {

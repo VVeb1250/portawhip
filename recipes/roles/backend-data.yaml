@@ -11,6 +11,7 @@
   route:
     triggers: ["query csv", "duckdb", "query parquet", "sql on files", "analyze large dataset"]
     description: "Run SQL directly over CSV/Parquet/SQLite/JSON files without loading them into context"
+    skipWhen: ["small in-memory data already loaded", "transactional database migrations"]
     when: [user_prompt]
     inject: hint
     binary: duckdb
@@ -21,6 +22,7 @@
   route:
     triggers: ["parse json", "jq", "filter json", "transform json", "query json file"]
     description: "Slice, filter, and transform JSON from the command line"
+    skipWhen: ["non-JSON structured data", "large analytical joins across files"]
     when: [user_prompt]
     inject: hint
     binary: jq

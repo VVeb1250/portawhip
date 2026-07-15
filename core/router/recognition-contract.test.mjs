@@ -37,6 +37,7 @@ test("recognition contract: multiple hits are declarative candidates with additi
   assert.equal(compact.results[0].skip_when, "plain text search");
   assert.equal(compact.results[0].kind, "tool");
   assert.equal(compact.results[0].type, "mcp");
+  assert.ok(!("reason" in compact));
 });
 
 test("recognition contract: one fresh hit keeps the compact fast path", () => {

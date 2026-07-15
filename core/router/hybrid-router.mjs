@@ -219,6 +219,7 @@ function formatResult(item, bar, peakednessRatio) {
     why: compactReason(item),
     action: classification.action,
     how_to_use: doc.description,
+    skipWhen: doc.skipWhen ?? [],
     pointer: doc.pointer,
     origin: doc.origin,
     readyMarker: doc.readyMarker ?? null,

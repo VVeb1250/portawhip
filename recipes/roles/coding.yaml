@@ -21,6 +21,7 @@
   route:
     triggers: ["benchmark command", "hyperfine", "compare performance", "measure runtime", "how fast is this"]
     description: "Command-line benchmarking with statistically sound comparisons"
+    skipWhen: ["functional correctness testing", "profiling inside a running application"]
     when: [user_prompt]
     inject: hint
     binary: hyperfine

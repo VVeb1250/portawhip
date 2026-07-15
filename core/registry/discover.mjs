@@ -14,6 +14,7 @@ import { dirname, join, resolve } from "node:path";
 import { homedir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { readEnrichmentCache } from "./enrich.mjs";
+import { normalizeTriggerSpec } from "./trigger-spec.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(HERE, "..", "..");
@@ -276,6 +277,7 @@ export async function discoverMcp(enrichCachePath) {
         route: {
           triggers: enriched?.triggers ?? [server.serverName],
           description: enriched?.description ?? `MCP server: ${server.serverName}`,
+          skipWhen: enriched?.skipWhen ?? [],
           when: ["user_prompt"],
           inject: "hint",
         },
@@ -326,8 +328,8 @@ export function discoverSkills() {
   return [...seen.values()];
 }
 
-export function discoverCli(enrichCachePath) {
-  const result = spawnSync.sync("mise", ["ls", "--json"], { encoding: "utf8" });
+export function discoverCli(enrichCachePath, runner = spawnSync.sync) {
+  const result = runner("mise", ["ls", "--json"], { encoding: "utf8" });
   if (result.status !== 0) return [];
   let tools;
   try {
@@ -347,6 +349,7 @@ export function discoverCli(enrichCachePath) {
       route: {
         triggers: enriched?.triggers ?? [name],
         description: enriched?.description ?? `CLI tool: ${name}`,
+        skipWhen: enriched?.skipWhen ?? [],
         when: ["user_prompt"],
         inject: "hint",
       },
@@ -373,7 +376,16 @@ export async function discoverAll({ enrichCachePath } = {}) {
   const byId = new Map();
   for (const entry of [...mcp, ...skills, ...cli, ...commands, ...agents]) {
     if (byId.has(entry.id)) continue;
-    byId.set(entry.id, entry);
+    const spec = normalizeTriggerSpec({
+      id: entry.id,
+      type: entry.type,
+      triggers: entry.route?.triggers,
+      skipWhen: entry.route?.skipWhen,
+    });
+    byId.set(entry.id, {
+      ...entry,
+      route: entry.route ? { ...entry.route, ...spec } : entry.route,
+    });
   }
   return [...byId.values()];
 }

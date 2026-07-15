@@ -137,7 +137,7 @@ test("mcp-server: reasoned actionable summary still routes the curated capabilit
   assert.equal(result.status, "success");
   const portawhip = result.results.find((hit) => hit.id === "portawhip");
   assert.ok(portawhip);
-  assert.deepEqual(Object.keys(portawhip).sort(), ["action", "how_to_use", "id", "kind", "pointer", "state", "tier", "type"]);
+  assert.deepEqual(Object.keys(portawhip).sort(), ["action", "how_to_use", "id", "kind", "pointer", "skip_when", "state", "tier", "type"]);
   assert.equal(portawhip.state, "fresh");
 });
 

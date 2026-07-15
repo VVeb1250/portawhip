@@ -117,6 +117,7 @@ export function buildCapabilityDocs(index) {
         path: entry.path ?? null,
         description: entry.route.description,
         triggers,
+        skipWhen: Array.isArray(entry.route.skipWhen) ? entry.route.skipWhen : [],
         frontmatterName: metadata.frontmatterName ?? null,
         frontmatterDescription: metadata.frontmatterDescription ?? null,
         headings: metadata.headings ?? [],

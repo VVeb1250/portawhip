@@ -53,6 +53,7 @@ export function route(index, prompt, { threshold, recipeThreshold, k, suggest = 
         why: `matched ${score} route trigger${score === 1 ? "" : "s"}`,
         action: entry.route.action ?? (entry.type === "skill" ? "read_skill" : "use_capability"),
         how_to_use: entry.route.description,
+        skipWhen: entry.route.skipWhen ?? [],
         pointer: pointerFor(entry),
         origin: entry.origin,
         readyMarker: entry.route.readyMarker ?? null,
