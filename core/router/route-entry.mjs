@@ -22,6 +22,38 @@ export async function runRoute(index, prompt, config) {
   return annotateIntentEvidence(index, prompt, candidates, { mode: config.mode });
 }
 
+function compactHit(hit) {
+  return Object.fromEntries(
+    [
+      ["id", hit.id],
+      ["type", hit.type],
+      ["tier", hit.tier],
+      ["action", hit.action],
+      ["how_to_use", hit.how_to_use],
+      ["pointer", hit.pointer],
+      ["readyMarker", hit.readyMarker],
+      ["readyHint", hit.readyHint],
+    ].filter(([, value]) => value !== null && value !== undefined),
+  );
+}
+
+export function compactRouteResult(result) {
+  if (result.status !== "success" || result.results.length === 0) {
+    return {
+      status: "empty",
+      reason:
+        result.reason ??
+        result.negative_evidence?.reason ??
+        "no installed capability cleared the routing threshold",
+    };
+  }
+
+  return {
+    status: "success",
+    results: result.results.map(compactHit),
+  };
+}
+
 export async function explainRoute(index, prompt, config) {
   const startedAt = Date.now();
   if (pushIsSilent(config)) {

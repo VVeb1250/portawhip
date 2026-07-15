@@ -10,7 +10,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { z } from "zod";
 import { loadIndex } from "../core/registry/registry.mjs";
 import { listAll } from "../core/router/scorer.mjs";
-import { explainRoute } from "../core/router/route-entry.mjs";
+import { compactRouteResult, explainRoute } from "../core/router/route-entry.mjs";
 import { loadRuntimeConfig } from "../core/state/config.mjs";
 import { computeFactors, logEvent } from "../core/state/feedback.mjs";
 import { stackFactors, combineFactors } from "../core/state/stack-detect.mjs";
@@ -43,8 +43,8 @@ server.tool(
     "If a request is buried in chat, route only the request; if the message names several distinct actions, call route once per action. " +
     "Example: 'ugh CI is flaky, anyway find where we parse the auth token' -> query 'find the code that parses the auth token'. " +
     "Returns pointers, not full content. An empty result is expected and means nothing installed fits.",
-  { query: z.string(), k: z.number().optional() },
-  async ({ query, k }) => {
+  { query: z.string(), k: z.number().optional(), verbose: z.boolean().optional() },
+  async ({ query, k, verbose }) => {
     const index = await loadIndex(RECIPE_PATHS);
     const config = loadRuntimeConfig({ basePath: CONFIG_PATH, cwd: process.cwd() });
     const factors = combineFactors(computeFactors(FEEDBACK_ROOT), stackFactors(index, process.cwd()));
@@ -80,7 +80,7 @@ server.tool(
       // attribution only needs capability id + source, so never persist it.
       logEvent(FEEDBACK_ROOT, { type: "suggested", id: hit.id, source: "pull" });
     }
-    return { content: [{ type: "text", text: JSON.stringify(result) }] };
+    return { content: [{ type: "text", text: JSON.stringify(verbose ? result : compactRouteResult(result)) }] };
   },
 );
 
