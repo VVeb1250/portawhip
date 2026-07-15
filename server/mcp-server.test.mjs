@@ -124,17 +124,18 @@ test("mcp-server: concise router-analysis actions can still abstain", async () =
   ];
   for (const summary of summaries) {
     const { result } = await callRoute(summary);
-    assert.equal(result.decision, "abstain", summary);
-    assert.deepEqual(result.results, [], summary);
+    assert.equal(result.status, "empty", summary);
+    assert.deepEqual(Object.keys(result).sort(), ["reason", "status"], summary);
+    assert.match(result.reason, /threshold|weak|keyword/i, summary);
   }
 });
 
 test("mcp-server: reasoned actionable summary still routes the curated capability", async () => {
   const { result } = await callRoute("import an installed CLI and synchronize it across agent hosts");
-  assert.equal(result.decision, "route");
+  assert.equal(result.status, "success");
   const portawhip = result.results.find((hit) => hit.id === "portawhip");
   assert.ok(portawhip);
-  assert.equal(portawhip.intentEvidence.mode, "pull");
+  assert.deepEqual(Object.keys(portawhip).sort(), ["action", "how_to_use", "id", "pointer", "tier", "type"]);
 });
 
 test("mcp-server: pull feedback never persists the reasoned summary text", async () => {
