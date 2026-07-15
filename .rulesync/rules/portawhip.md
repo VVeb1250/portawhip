@@ -1,6 +1,12 @@
 ---
 root: true
-targets: ["*"]
+# cursor + zed omitted on purpose: both read the root AGENTS.md natively, so a
+# separate .cursor/rules/*.mdc / .rules file would be redundant duplicate context
+# (see rulesync issue #1067). Every host below either needs its own file (does
+# not read AGENTS.md: claudecode/qwencode/copilot/goose) or produces the shared
+# AGENTS.md (codexcli/opencode/amp/pi/cline/junie). NB: rulesync has no gemini
+# target, so GEMINI.md is not managed here — tracked as a known gap.
+targets: ["claudecode", "codexcli", "copilot", "cline", "opencode", "goose", "amp", "pi", "qwencode", "junie"]
 description: "Portawhip project agent instructions"
 globs: ["**/*"]
 ---
