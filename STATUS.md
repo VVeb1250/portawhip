@@ -1,10 +1,15 @@
 # Release Status
 
-Current status: release checklist passed locally on Windows.
+Current status: release checklist passed locally on Windows. Steady-state
+fan-out is now **rulesync** (sole writer, both scopes) after the
+writer-consolidation refactor — `ai-config-sync-manager` below is
+migration/import only. Only `npm test` was re-verified on 2026-07-15
+(268/268); the other rows are from the original release run and predate the
+consolidation.
 
 Release checklist:
 
-- [x] `npm test` - 120/120 passed
+- [x] `npm test` - 268/268 passed (re-verified 2026-07-15)
 - [x] `npm run route:eval` - passed, falsePositiveCount 0
 - [x] `npm run sync-config` - passed using pinned local `ai-config-sync-manager`
 - [x] `npm run sync-config:preview` - dry-run path passed using pinned local `ai-config-sync-manager`
@@ -12,7 +17,7 @@ Release checklist:
 - [x] `node scripts/doctor.mjs` - unified status OK
 - [x] `node scripts/tui.mjs --help`
 - [x] `node scripts/tui.mjs --summary`
-- [x] `node core/router-cli.mjs route --prompt "connector readiness"` completes without timing out
+- [x] `node core/router/router-cli.mjs route --prompt "connector readiness"` completes without timing out
 - [x] `npm audit` - 0 vulnerabilities
 
 Notes:

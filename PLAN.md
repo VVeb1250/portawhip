@@ -1,10 +1,18 @@
 # Plan: Smart Capability Router (portable-harness-v2, Step 2+)
 
-> **Status: all 4 phases below are DONE (2026-07-04).** This file is kept as
-> the historical roadmap/design record — read `HANDOFF.md` first for what's
-> actually true right now (it decays much less than a roadmap doc written
-> before the work started). Don't re-plan or re-execute a phase from here
-> without checking `HANDOFF.md` and `git log` first.
+> **Status: all 4 phases below are DONE (2026-07-04); the router intelligence
+> was then overhauled 2026-07-09/11 (push/pull asymmetry, dense retrieval,
+> silent-by-default push).** Two successor execution phases followed, each with
+> its own roadmap, both now complete: cross-host surface sync
+> (`docs/sync-connector-plan.md`, S0–S4) and the single-writer refactor that
+> made **rulesync the sole fan-out writer** (`docs/writer-consolidation-plan.md`).
+> This file is kept as the historical roadmap/design record; read `HANDOFF.md`
+> first for what's actually true right now. **Note:** the 2026-07-11 refactor
+> moved most module paths cited in the §4 tree and §5 phase specs below
+> (`core/` → `router/registry/surface/state/`, `scripts/` → `link/sync/`) —
+> those are the original design sketch, not the current layout; trust a fresh
+> `ls`. Don't re-plan or re-execute a phase from here without checking
+> `HANDOFF.md` and `git log` first.
 
 > Executor: Claude Sonnet. Work through phases in order. Each phase has explicit
 > **Verify** and **Exit criteria** — do not start the next phase until the current

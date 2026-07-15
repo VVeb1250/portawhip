@@ -1,9 +1,18 @@
 # Plan — Sync-Connector Refocus (Phase S0–S4)
 
-> Status: proposed 2026-07-10. Successor execution phase after the router
-> phases (PLAN.md Phase 0–4, done). Anchor doc is VISION.md §1 half #1
-> ("load however, use anywhere") — this plan closes the gap between that
-> vision and the current install/push-only reality.
+> Status: **DONE — phases S0–S4 shipped 2026-07-10** (per-phase logs
+> `docs/archive/phaseS0-verify.md` … `phaseS4-verify.md`; `HANDOFF.md` holds
+> the living summary). Successor execution phase after the router phases
+> (PLAN.md Phase 0–4, done); anchor is VISION.md §1 half #1. This plan closed
+> the gap between that vision and the former install/push-only reality.
+> **Superseded on the mechanism:** this plan's canonical store + fan-out used
+> `.agents/` + `@agents-dev/cli`; the later writer-consolidation refactor
+> (`docs/writer-consolidation-plan.md`, locked 2026-07-13) replaced that with
+> **rulesync as the sole fan-out writer** (canonical `.rulesync/`) and retired
+> `@agents-dev`. The *direction* (import → canonical → fan-out, no new
+> reconciler) still holds; only the backing writer changed. Module paths cited
+> below predate the 2026-07-11 refactor (`core/*`, `scripts/*` → subfolders) —
+> trust a fresh `ls`.
 
 ## Problem statement
 

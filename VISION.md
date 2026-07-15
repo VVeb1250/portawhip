@@ -1,8 +1,11 @@
 # Vision — portable-harness-v2
 
-> This is the "why" and "destination" doc. `PLAN.md` is the current
-> execution phase (Smart Capability Router, Step 2+). If they ever conflict,
-> re-derive PLAN.md from this file — this one is the anchor.
+> This is the "why" and "destination" doc — it changes only when direction
+> changes. `HANDOFF.md` owns the living current state. The execution roadmaps
+> (`PLAN.md` for the router, `docs/sync-connector-plan.md` for surface sync,
+> `docs/writer-consolidation-plan.md` for the single-writer refactor) are all
+> complete; read them for the reasoning, not the current status. If they ever
+> conflict, re-derive the roadmaps from this file — this one is the anchor.
 
 ## 0. Where this came from
 
@@ -33,19 +36,29 @@ duplicates things that already exist elsewhere.
 
 ## 1. One-sentence destination
 
-**A thin, dynamic control-plane that loads capabilities (MCP / CLI / skills)
-into whatever AI agent hosts + OS the user actually has, by delegating to
-the best existing tool per capability type — and separately, a router that
-surfaces the *right* capability at the *right* moment instead of dumping
-everything into context.**
+**A thin, dynamic control-plane that loads, syncs, and surfaces capabilities
+across whatever AI-agent hosts + OS the user actually has — importing what's
+installed in any one host and fanning it out to all of them (MCP, CLI,
+skills, commands, agents, instructions, hooks), by delegating to the best
+existing tool per surface — and, separately, a router that surfaces the
+*right* capability at the *right* moment instead of dumping everything into
+context.**
 
-Two halves, built in this order:
+Two halves, both now built:
 
-1. **Loader** (done — Step 1): "load however, use anywhere." No install
-   logic of our own.
-2. **Router** (in progress — PLAN.md Phase 0-4): "surface the right thing at
-   the right time." No routing logic reinvented where a host already does
-   it natively.
+1. **Loader + cross-host surface sync** (Step 1 done; bidirectional sync
+   S0–S4 done; single-writer consolidation done): "load however, use
+   anywhere" — now in both directions. Declare a capability once in
+   `recipe.yaml`/`.rulesync/` and fan it out, *and* import what's already
+   installed in any detected host → a canonical store → back out to every
+   other host, across seven surfaces (instructions, MCP, skills, commands,
+   agents, native hooks; embedded hooks inventory-only — a trust boundary).
+   No install/sync engine of our own; delegated to add-mcp / mise / asm /
+   **rulesync** (the sole fan-out writer, both project and global scope).
+2. **Router** (Phase 0–4 done; intelligence overhaul 2026-07-09/11):
+   "surface the right thing at the right time." Hybrid sparse+dense
+   retrieval, calibrated-confidence abstain, push/pull-asymmetric delivery.
+   No routing logic reinvented where a host already does it natively.
 
 ## 2. Non-negotiable principles (the anti-repeat-v1 rules)
 
@@ -83,9 +96,13 @@ orchestration):
 | component | owner | why |
 |---|---|---|
 | Agent loop | the host itself (Claude Code / Codex / Gemini / ...) | not ours to build |
-| Tool interface — MCP | **add-mcp** (`neon-solutions/add-mcp`) | consumer-side installer, no dependency on the target server adopting any SDK; real cross-host config writer with reversible managed blocks; `detectGlobalAgents()` gives live host detection with zero hardcoding |
-| Tool interface — non-MCP CLI | **mise** (`jdx/mise`) | cross-OS dev-tool version manager, single Rust binary, legit organic adoption (30k⭐ over 3.5y, not inflated) |
-| Guides / skill content + cross-host delivery | **asm** (`agent-skill-manager`) for install/sync; **ECC** for content (detect-only, not owned) | asm is the actively-maintained one of 3 skill-sync candidates (openskills has more stars but 5.5mo silent — risk); ECC ships real, honestly-tiered (Native/Adapter-backed/Instruction-backed/Reference-only) cross-host skill content already |
+| Cross-host fan-out — instructions / rules / commands / subagents / MCP config, both scopes | **rulesync** (`dyoshikawa/rulesync`), sole writer | one writer per target file is non-negotiable (overlapping total-ownership writers oscillate — proven, §5 #19); rulesync is the only candidate that does both project **and** global scope, all surface features, idempotent, and stays surgical on shared config (`~/.claude.json` keeps `projects`/`userID`). Canonical source = `.rulesync/`; every host file is generated output |
+| Tool interface — MCP (read side) | **add-mcp** (`neon-solutions/add-mcp`) | its write role is retired (rulesync owns fan-out), but it stays for **discovery/import**: `listInstalledServers()` unions MCP servers across all detected hosts, which `rulesync import` can't do. `detectGlobalAgents()` also gives live host detection with zero hardcoding |
+| Tool interface — non-MCP CLI | **mise** (`jdx/mise`) | cross-OS dev-tool version manager, single Rust binary, legit organic adoption (30k⭐ over 3.5y, not inflated); no host-config overlap, so kept as-is |
+| Guides / skill content | **asm** (`agent-skill-manager`) for long-tail skill hosts; **ECC** for content (detect-only, not owned) | rulesync's `--targets` covers most skill hosts; asm fills the long tail it doesn't. ECC ships real, honestly-tiered cross-host skill content already |
+| Config migration / import | **ai-config-sync-manager** | migration/import only, never a steady-state writer (that role went to rulesync) |
+| Native hooks key | **`scripts/link/link-hooks.mjs`** (ours) | rulesync's `hooks` feature is non-functional for claudecode (live-tested); link-hooks is a surgical writer on that one disjoint region of a file rulesync otherwise owns — the coexistence rule (surgical writers may share; total-ownership writers may not) |
+| Host detection | **add-mcp** primary + `core/surface/extra-hosts.mjs` supplement | add-mcp catalogues mainstream hosts; a presence-checked probe covers newer ones it hasn't (Pi, Amp). Still detection, never a hardcoded support list |
 | Memory | **ICM** | researched 11 alternatives (mem0, agentmemory, Letta, Zep, Graphiti, Cognee, txtai, Memori, SQLite-Memory, memoirs) — none beat it on the actual constraint set (no-daemon + CLI + local + cross-host + cheap adapter) simultaneously; the real defect (SQLite durability) was already fixed upstream |
 | Suggestion timing (what to route, when) | **ours to own** — this is the actual gap nobody else fills well | see PLAN.md; this is the one genuinely-unsolved piece |
 | Permissions / guardrails | host-native hooks + existing security CLIs (nah/gitleaks/osv-scanner, inherited from v1's registry) | not re-litigated in this project yet |
@@ -111,12 +128,28 @@ routing claims) and, where possible, actually running the tool:
   landed 2026-07-01 in the predecessor repo).
 - **ECC** — already installed on this machine; used for skill *content*
   only, detect-first, not owned or rebuilt.
+- **rulesync** (`dyoshikawa/rulesync`) — the sole cross-host fan-out writer,
+  added in the writer-consolidation refactor. Won a live 3-way head-to-head
+  (2026-07-13, `docs/writer-consolidation-plan.md`) against `@agents-dev/cli`
+  and `ai-config-sync-manager`: does both scopes (the others were
+  project-only), broader features, idempotent, surgical on shared config.
+  Targets are a scoped 12-host list (`rulesync.jsonc`), never `*` — an
+  unscoped run writes ~35 files for tools you don't even have. v9.6.3 was
+  active 2 days before the test (single maintainer — a watched risk).
+- **Supplementary host detection** — `core/surface/extra-hosts.mjs`
+  presence-probes hosts add-mcp hasn't catalogued yet (Pi, Amp), each entry
+  citing its doc source. The live host set is an 11-row matrix
+  (`docs/host-support.md`); every unsupported cell carries a concrete reason.
+- **Retired: `@agents-dev/cli`** — was the original pick for the `.agents/`
+  fan-out, but it is project-only (can't do global), its MCP ingestion was
+  fiddly, and it injects default servers on init. rulesync dominated it on
+  every tested axis, so it was dropped as a writer (see §5 #19).
 - Rejected: agent-connector (wrong side of the MCP relationship — built for
   authoring/distributing your own server, not consuming third-party ones),
   openskills (10.5k⭐ but 5.5 months silent — maintenance risk), 4 of 5
   Phase-0 gateway candidates (dead 11-13 months), `metamcp` (only
   actively-maintained gateway, but Docker-first web app, not an embeddable
-  library — rejected for Phase 0, see docs/phase0-audit.md).
+  library — rejected for Phase 0, see docs/archive/phase0-audit.md).
 
 ## 5. Decisions made and why (chronological, so the reasoning survives)
 
@@ -199,75 +232,134 @@ routing claims) and, where possible, actually running the tool:
     (shared stopwords + idf-scaled single-word trigger credit in
     `core/sparse-retriever.mjs`), not by picking a bigger magic number; (c)
     `graphPath` had the same cwd-relative bug already fixed once for
-    recipe.yaml — fixed the same way. See `docs/phase2.5-verify.md`'s
+    recipe.yaml — fixed the same way. See `docs/archive/phase2.5-verify.md`'s
     "Correction" section for the full audit trail.
+12. **Dense semantic retrieval added as a second, additive channel
+    (2026-07-06).** Tuning the lexical channel alone hit a proven wall (a real
+    paraphrase miss scored *below* a false positive it was tensioned against —
+    no single threshold fixes both). `core/router/dense-embedder.mjs` runs
+    BAAI/bge-m3 via `@huggingface/transformers` (MIT, 100+ languages incl.
+    Thai, self-downloading, zero setup), fused through the same lane/peakedness
+    gate. On by default for MCP server + CLI; the push hook opts out (a fresh
+    subprocess per prompt can't amortize a 500MB+ model load).
+13. **Push and pull are different products — asymmetric by design
+    (2026-07-09).** A feedback-log audit found the hit rate was *unmeasurable*,
+    not just bad: 21/26 "suggestions" fired on `<task-notification>` synthetic
+    blobs, and `resolveId` had no branch for the Skill/Agent tools. Lesson
+    banked: **fix measurement before tuning.** Push (unsolicited interruption)
+    now has a hard precision gate + a full→terse→silent per-session repeat
+    budget; pull (solicited `route()`) keeps generous recall and unused results
+    earn **no decay** (boost-only). See `docs/router-intelligence.md`.
+14. **Second vision-half activated: bidirectional surface sync (S0–S4,
+    2026-07-10).** Until now everything flowed `recipe.yaml → hosts`
+    (install/push only). Built as import → canonical → fan-out with **no new
+    reconciler**. Surface coverage widened from 3 capability types to 7. (The
+    first cut used `.agents/` + `@agents-dev/cli` as the canonical fan-out;
+    both were later superseded by rulesync — see #19.) See
+    `docs/sync-connector-plan.md`.
+15. **Host widening by presence-probe, not by list (2026-07-10).**
+    `core/surface/extra-hosts.mjs` adds Pi and Amp as evidence-cited data
+    behind a presence gate, kept in a separate `extraHosts` bucket. Inert until
+    such a host is installed (neither is here — documented-but-dogfood-pending,
+    honest per the live-probe rule). Full matrix: `docs/host-support.md`.
+16. **Push/pull mode differentiation above the engines (WS-A, 2026-07-11).**
+    A raw prompt carries no reasoned intent, so **push is silent by default**
+    (`PORTAWHIP_PUSH_MODE=legacy` is the rollback). Pull contracts ask the
+    agent for only the *positively requested action + direct object* —
+    excluding background, merely-mentioned, rejected, negated candidates (the
+    wording now in the managed instruction blocks). Engines unchanged
+    (invariance-tested). See `docs/archive/ws-a-mode-differentiation-verify.md`.
+17. **Stateful situation/policy engine: evidence gate → NO-GO, deferred
+    (WS-B, 2026-07-11).** Routing differently based on what was already used /
+    blockers / readiness was gated against the feedback log and *rejected*:
+    too few `used` events, zero observed counterfactuals — it would encode
+    imagined behavior, not a proven gap. Proven-gap-before-scope doing its job.
+    Revisit gate recorded: `docs/archive/ws-b-evidence-gate.md`.
+18. **Structural refactor into concern subfolders (2026-07-11).** `core/` →
+    `router/ registry/ surface/ state/`; `scripts/` → `link/ sync/` + root
+    hubs. No behavior change. Any path cited in earlier items of this section,
+    in `PLAN.md`'s phase specs, or in `docs/archive/` predates this move —
+    `core/router-cli.mjs` is now `core/router/router-cli.mjs`, and so on.
+19. **Writer consolidation — one writer per target file (LOCKED 2026-07-13,
+    the biggest recent decision).** The real architectural disease was **many
+    backends writing the same host files → drift.** Proven live: on one shared
+    Codex MCP target, `ai-config-sync`'s marker block and `@agents-dev`'s
+    total-file regen fought forever (hashes never converged — a drift *war*).
+    A 3-way head-to-head (`docs/writer-consolidation-plan.md`) picked **Fork A:
+    `rulesync` as the sole fan-out writer, both scopes.** Distilled rule: the
+    disease is specifically **total-ownership writers** (regenerate whole files,
+    "do not edit manually") — surgical mergers (add-mcp, marker-block, rulesync
+    on shared config) coexist fine; never mix a total-ownership writer with any
+    other on one file. Consequences: `@agents-dev/cli` retired; `ai-config-sync`
+    → migration-only; `add-mcp` keeps its read/union side; `mise` kept; `asm`
+    → skill long-tail; `link-hooks` keeps the hooks key (rulesync's hooks
+    feature is non-functional for claudecode). Cross-scope dedup is solved by a
+    **derived** scope (`core/surface/scope-derive.mjs`) — project-bound config
+    forced to project, portable config scoped by where it's discovered — never
+    a hand-maintained list (that would be hardcoded decision logic again).
+20. **Auto fan-out live, watchdog deliberately not built (Phase 5 done
+    2026-07-14).** `scripts/sync/auto-sync.mjs` (lock+throttle+log) fires
+    fire-and-forget from the SessionStart hook, propagating only already-
+    canonical entries (never auto-discovers — that's what an earlier design got
+    wrong, pouring hundreds of entries across every host). Enabled at project
+    scope; global stays manual (no auto-apply gate cleared there). Two gaps
+    rulesync doesn't cover (no `plugins` feature; no embedded-hooks-in-skills
+    lane) → strategy is **contribute upstream, never add a 3rd sync dep**
+    (a separate writer on shared dirs = the drift disease again).
 
-## 6. Current state (2026-07-04)
+## 6. Current state (2026-07-15)
 
-**Cross-host coverage: mostly closed, see `HANDOFF.md`'s table for the
-current per-host matrix.** Codex built `adapters/hooks/universal-hook.mjs`
-+ `scripts/link-hooks.mjs`/`link-connectors.mjs`, extending native push/
-feedback hooks to claude-code, codex, and gemini-cli, with cursor/
-copilot-cli/vscode/claude-desktop honestly reported as `unsupported`/
-`mcp-only` (no confirmed native hook API). A duplicate-hook-firing bug
-from two parallel implementations (mine, project-scoped Codex's) was found
-and fixed same day — consolidated onto `universal-hook.mjs` at global
-scope. `HANDOFF.md` has the exact commands used; don't rebuild any of
-this without checking that table first.
+Both vision-halves are built and locally verified on this Windows machine.
+**`HANDOFF.md` is the living state doc — read it for known gaps, bugs found
+and fixed, and what's honestly still unverified. This is the high-altitude
+summary only.** Full suite: **268/268** (`npm test`); `npm run route:eval`
+clean (precision@1 / recall@3 / MRR / abstainAccuracy 1.0, falsePositive 0).
 
-- **Step 1 — Loader: done, proven live.** `recipe.yaml` + `scripts/load.mjs`
-  + `scripts/hosts.mjs` + `scripts/doctor.mjs`. 3/3 real installs verified
-  (MCP, CLI, skill), idempotent re-run verified, dynamic host detection
-  verified (7 MCP hosts, 5 skill hosts found on this machine with zero
-  hardcoded list), self-healing transport-mismatch retry verified.
-- **Phase 0 — Router base decision: done.** Option B chosen and recorded
-  (`docs/phase0-audit.md`).
-- **Phase 1 — Registry + scorer core: done, proven.** `core/registry.mjs`
-  (parses `recipe.yaml`'s `route:` blocks, fails loud on malformed ones,
-  merges in `core/discover.mjs`'s live auto-discovery, caches normalized
-  index at `.hp-state/route-index.json`), `core/scorer.mjs` (layer-1
-  keyword/trigger match, per-origin abstain threshold), `core/config.mjs`
-  + `router.config.yaml` (tunable, not hardcoded), `core/router-cli.mjs`
-  (`route --prompt`, `list --type`). 9/9 unit tests green (7 curated-only +
-  2 discovery-merge); manual check against this machine's real installed
-  base (371 skills via asm, live MCP servers via add-mcp, CLI tools via
-  mise): curated triggers fire correctly, real unrelated prompts abstain,
-  no cross-host duplicate entries.
-- **Phase 2 — Pull-mode MCP server: done, mostly proven** (see
-  `docs/phase2-verify.md`). `server/mcp-server.mjs` exposes `route`/
-  `list_all`; registered globally on 7 detected hosts via the recipe.yaml/
-  loader path (dogfooded); `adapters/instructions/generate.mjs` installed
-  an idempotent one-liner into the user's real `~/.claude/CLAUDE.md` and
-  `~/.codex/AGENTS.md` (backed up first). Only the literal "fresh session
-  calls route() unprompted" behavioral check is still open — needs
-  observing in a real new session, not provable from within this one.
-- **Phase 3 — Push-mode Claude Code adapter: done, precision bar
-  deliberately deferred** (see `docs/phase3-verify.md`).
-  `adapters/claude-code/push-hook.mjs` + `scripts/install-push-hook.mjs`;
-  installed live into `~/.claude/settings.json` (backed up first) alongside
-  the still-active old `skill-router.py` hook (not disabled yet — user
-  choice, verify first). Hard requirement (silence on non-match) 5/5.
-  Should-match eval only 3/5 clean; 2 known misses (pdf, literal "grep")
-  logged as Phase 4 feedback-loop targets rather than hand-tuned now.
-  OpenCode adapter: not started (stub only, no OpenCode detected on this
-  machine yet).
-- **Phase 4 — Feedback loop: done (usage weighting), embeddings not
-  attempted** (see `docs/phase4-verify.md`). `core/feedback.mjs`
-  (append-only JSONL, bounded ×0.5–×2.0 factor), wired into push-hook,
-  router-cli, and mcp-server (not `eval`, kept deterministic). New
-  `adapters/claude-code/feedback-mark-hook.mjs` (PostToolUse) resolves
-  tool calls back to capability ids. Found and fixed a real bug in the
-  same pass: `route.binary` field added because `ripgrep`'s mise `source`
-  ("ripgrep") never matched its actual invoked command ("rg"). Demoed:
-  an ignored suggestion drops below its threshold and stops appearing
-  (observed in 2 ignores, not literally 5 — same mechanism, converges
-  faster on this query). Dense embedding rerank (PLAN.md item 3):
-  deliberately not attempted — optional in the plan, no proven gap yet
-  that keyword+hybrid can't cover.
-- **Explicitly not rebuilt / out of scope for now:** team-kernel,
-  mutation/verification loop, multi-agent orchestration (all existed in v1
-  with passing tests but no daily-use proof — revisit only if the loader+
-  router prove themselves first and a specific gap demands it).
+Half 1 — load + sync:
+
+- **Step 1 loader: done, proven live.** `recipe.yaml` + `scripts/load.mjs` +
+  `scripts/hosts.mjs` + `scripts/doctor.mjs`. Real MCP/CLI/skill installs,
+  idempotent re-run, dynamic host detection (zero hardcoded list),
+  self-healing transport-mismatch retry — all verified.
+- **Sync connector (S0–S4): done.** Bidirectional surface sync across 7
+  surfaces and an 11-host matrix. `npm run import` (manual, preview-gated) →
+  canonical → `npm run surface:sync` fan-out. CLI entries auto-enriched on
+  import (mise → package registry → tldr → `--help`, no LLM). Embedded hooks
+  inventoried, never auto-linked (`npm run hooks:embedded`).
+- **Writer consolidation: done, the current architecture.** **rulesync is the
+  sole fan-out writer** for both project and global scope, from a canonical
+  `.rulesync/`. `@agents-dev/cli` retired; `ai-config-sync` migration-only;
+  `add-mcp` read/union side kept; `link-hooks` keeps the hooks key. Scope is
+  derived per server (`scope-derive.mjs`), not hand-listed. Auto fan-out fires
+  from SessionStart at project scope (throttled, propagates only already-
+  canonical entries); global apply stays manual. See
+  `docs/writer-consolidation-plan.md`.
+
+Half 2 — router:
+
+- **Phase 0–2 (base decision B, registry+scorer, pull-mode MCP server):
+  done.** `server/mcp-server.mjs` exposes `route`/`list_all`, registered on
+  detected hosts; instruction blocks fanned out (now via rulesync) into the
+  hosts' context files, idempotent.
+- **Phase 2.5 + Phase 4 item 3 (hybrid + dense retrieval): done.** Sparse
+  lexical + dense bge-m3, fused through per-lane peakedness/abstain gates;
+  calibrated confidence, not a single magic threshold.
+- **Phase 3–4 (push + feedback loop): done.** Cross-host push/feedback via one
+  `adapters/hooks/universal-hook.mjs` + `scripts/link/link-hooks.mjs`
+  (claude-code, codex, gemini-cli native; others honestly `unsupported`/
+  `mcp-only`). Trust-loop hygiene + push/pull asymmetry (2026-07-09);
+  silent-by-default push (2026-07-11). Feedback JSONL bounded/rotated. The
+  WS-B stateful-policy escalation is evidence-gated NO-GO — deferred.
+- **Deliberately still open:** the "fresh session calls `route()` unprompted"
+  behavioral check can't be proven from inside a running session; global
+  auto-apply gate not cleared; push-precision runs on clean feedback data
+  before the next tuning round (`docs/router-intelligence.md`).
+
+- **Explicitly not rebuilt / out of scope:** team-kernel, mutation/
+  verification loop, multi-agent orchestration (existed in v1 with passing
+  tests but no daily-use proof), the WS-B situation-state policy engine (gated
+  off), and any 3rd sync dependency for rulesync's two gaps (plugins,
+  embedded-hooks) — the plan is to contribute those upstream instead.
 
 ## 7. Destination check (how we'll know we're not lost)
 
