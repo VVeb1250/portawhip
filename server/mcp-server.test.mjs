@@ -114,6 +114,8 @@ test("mcp-server: route tool asks for a reasoned requested-action summary", asyn
   assert.ok(routeTool, "route tool must be listed");
   assert.match(routeTool.description, /requested action/i);
   assert.match(routeTool.description, /not (?:repeat|copy) the raw (?:prompt|topic)/i);
+  assert.match(routeTool.description, /candidates,? not commands/i);
+  assert.match(routeTool.description, /pick or ignore/i);
   assert.deepEqual(Object.keys(routeTool.inputSchema.properties).sort(), ["k", "query"]);
 });
 
@@ -135,7 +137,8 @@ test("mcp-server: reasoned actionable summary still routes the curated capabilit
   assert.equal(result.status, "success");
   const portawhip = result.results.find((hit) => hit.id === "portawhip");
   assert.ok(portawhip);
-  assert.deepEqual(Object.keys(portawhip).sort(), ["action", "how_to_use", "id", "pointer", "tier", "type"]);
+  assert.deepEqual(Object.keys(portawhip).sort(), ["action", "how_to_use", "id", "kind", "pointer", "state", "tier", "type"]);
+  assert.equal(portawhip.state, "fresh");
 });
 
 test("mcp-server: pull feedback never persists the reasoned summary text", async () => {
