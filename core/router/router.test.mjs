@@ -10,7 +10,7 @@ import {
   _forceUnavailableForTest,
   _setPipelinePendingForTest,
 } from "./dense-embedder.mjs";
-import { explainRoute, runRoute } from "./route-entry.mjs";
+import { compactRouteResult, explainRoute, runRoute } from "./route-entry.mjs";
 import { triggerCoverageEvidence } from "./intent-evidence.mjs";
 import { loadConfig } from "../state/config.mjs";
 import { CONNECTOR_TARGETS, targetsForHost } from "../surface/connector-targets.mjs";
@@ -209,6 +209,66 @@ test("explainRoute: empty result includes negative evidence", async () => {
   assert.equal(result.decision, "abstain");
   assert.deepEqual(result.near_misses, result.suppressed);
   assert.equal(result.reason, result.negative_evidence.reason);
+});
+
+test("compactRouteResult: emits only actionable fields for successful routes", () => {
+  const result = compactRouteResult({
+    status: "success",
+    decision: "route",
+    summary: "found 1 actionable capability match",
+    results: [{
+      id: "pdf",
+      type: "skill",
+      kind: "skill",
+      score: 1.25,
+      tier: "required",
+      confidence: 0.98,
+      why: "matched pdf",
+      action: "read_skill",
+      how_to_use: "Read and edit PDF files.",
+      pointer: "/skills/pdf",
+      origin: "recipe",
+      readyMarker: null,
+      readyHint: null,
+      intentEvidence: { advisoryOnly: true },
+    }],
+    suppressed: [{ id: "noise" }],
+    near_misses: [{ id: "noise" }],
+    negative_evidence: null,
+    reason: null,
+    latency_ms: 12,
+  });
+
+  assert.deepEqual(result, {
+    status: "success",
+    results: [{
+      id: "pdf",
+      type: "skill",
+      tier: "required",
+      action: "read_skill",
+      how_to_use: "Read and edit PDF files.",
+      pointer: "/skills/pdf",
+    }],
+  });
+});
+
+test("compactRouteResult: empty routes contain only status and reason", () => {
+  const result = compactRouteResult({
+    status: "empty",
+    decision: "abstain",
+    summary: "no actionable capability matched this task",
+    results: [],
+    suppressed: [{ id: "weak-match" }],
+    near_misses: [{ id: "weak-match" }],
+    negative_evidence: { result: "empty", reason: "only weak matches were found" },
+    reason: "only weak matches were found",
+    latency_ms: 7,
+  });
+
+  assert.deepEqual(result, {
+    status: "empty",
+    reason: "only weak matches were found",
+  });
 });
 
 test("curated aliases: harness audit routes to workspace surface audit", async () => {
