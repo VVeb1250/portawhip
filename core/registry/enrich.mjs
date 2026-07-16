@@ -55,6 +55,23 @@ function writeEnrichmentCache(entries, cachePath = DEFAULT_CACHE_PATH) {
 // is best-effort enrichment, never a requirement for the tool to route at
 // all (VISION.md: live-probe, never overclaim).
 
+// The pure name/description -> route-metadata formula, split out from the live
+// probe below so it can be exercised without a running server. Callers that
+// already hold a tools/list payload (tests, eval fixtures built from published
+// server metadata) get byte-identical output to production rather than a
+// hand-copied lookalike that silently drifts.
+export function mcpEnrichmentFrom(serverName, tools = []) {
+  const names = tools.map((tool) => tool.name).filter(Boolean);
+  const descriptions = tools.map((tool) => tool.description).filter(Boolean);
+  const description = descriptions.length
+    ? `MCP server: ${serverName} — ${descriptions.slice(0, 3).join("; ")}`.slice(0, MAX_DESCRIPTION_CHARS)
+    : `MCP server: ${serverName}${names.length ? ` (tools: ${names.slice(0, 8).join(", ")})` : ""}`;
+  return {
+    triggers: [serverName, ...names].slice(0, MAX_MCP_SUBTOOL_TRIGGERS),
+    description,
+  };
+}
+
 async function enrichMcpServer(server, { timeoutMs = 8000 } = {}) {
   const { serverName, config } = server;
   if (!config) return null;
@@ -69,15 +86,7 @@ async function enrichMcpServer(server, { timeoutMs = 8000 } = {}) {
       new Promise((_, reject) => setTimeout(() => reject(new Error("enrich timeout")), timeoutMs)),
     ]);
     const { tools } = await client.listTools();
-    const names = tools.map((t) => t.name).filter(Boolean);
-    const descriptions = tools.map((t) => t.description).filter(Boolean);
-    const description = descriptions.length
-      ? `MCP server: ${serverName} — ${descriptions.slice(0, 3).join("; ")}`.slice(0, MAX_DESCRIPTION_CHARS)
-      : `MCP server: ${serverName}${names.length ? ` (tools: ${names.slice(0, 8).join(", ")})` : ""}`;
-    return {
-      triggers: [serverName, ...names].slice(0, MAX_MCP_SUBTOOL_TRIGGERS),
-      description,
-    };
+    return mcpEnrichmentFrom(serverName, tools);
   } catch {
     return null;
   } finally {
@@ -173,6 +182,18 @@ function tryPipShow(bin) {
 // bare-name fallback. `pip show` stays safe because pipx installs are
 // always a 1:1 name-to-PyPI-package mapping, never a name collision.
 
+// Pure counterpart to mcpEnrichmentFrom, for the same reason: callers holding a
+// already-known help line (tests, eval fixtures built from published CLI docs)
+// must get exactly what the live `--help` probe below would produce.
+export function cliEnrichmentFrom(id, helpLine) {
+  const bin = cliBinary(id);
+  return {
+    type: "cli",
+    triggers: [id, bin],
+    description: `CLI tool: ${bin} — ${helpLine}`.slice(0, MAX_DESCRIPTION_CHARS),
+  };
+}
+
 export function enrichCli(ids) {
   const results = {};
   for (const id of ids) {
@@ -180,9 +201,7 @@ export function enrichCli(ids) {
     const description = tryHelp(bin) ?? (id.startsWith("pipx:") ? tryPipShow(bin) : null);
     if (!description) continue;
     results[id] = {
-      type: "cli",
-      triggers: [id, bin],
-      description: `CLI tool: ${bin} — ${description}`.slice(0, MAX_DESCRIPTION_CHARS),
+      ...cliEnrichmentFrom(id, description),
       enrichedAt: new Date().toISOString(),
     };
   }
