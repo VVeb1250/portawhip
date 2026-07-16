@@ -65,6 +65,17 @@ const BROAD_TERMS = new Set([
   "mcp",
   "cli",
   "capability",
+  // The adjectives that vocabulary travels with. Found live via the eval's
+  // `intent-research-mcp-domain` case ("research MCP availability and live
+  // precision for dynamic tools and skills and future agents"): with
+  // mcp/tool/skill already generic, sequential-thinking still cleared the bar
+  // on "dynamic" alone, matched against its own description ("a tool for
+  // dynamic and reflective problem-solving"). Neither word says anything about
+  // WHICH capability a task needs — every server can be described as dynamic
+  // and every check can be described as live — so a candidate whose only
+  // overlap is one of them has no evidence, same as the nouns above.
+  "live",
+  "dynamic",
 ]);
 
 function isWordChar(value) {
@@ -176,7 +187,17 @@ function classifyCandidate(item, bar, peakednessRatio = 1.05) {
   const baseConfidence = bar > 0 ? Math.min(1, score / bar) : 1;
   const terms = item.terms ?? [];
   const specificTerms = terms.filter((term) => !BROAD_TERMS.has(term));
-  const weakKeywordOnly = terms.length > 0 && specificTerms.length === 0 && item.doc?.origin !== "recipe";
+  // No `origin !== "recipe"` exemption here. This is an evidence test, not a
+  // trust test: curation says a capability matters to this project, which
+  // cannot manufacture evidence that THIS prompt is about it. Curation is
+  // already paid for where it belongs — a lower recipeThreshold to clear, and
+  // the "required" tier below. Exempting curated entries from the evidence test
+  // instead let this repo's OWN meta-tooling fire on any talk about
+  // capabilities: portawhip is a skill about capability sync, so its indexed
+  // text is saturated with exactly the meta-vocabulary BROAD_TERMS exists to
+  // neutralize, and it matched the eval's `intent-research-mcp-domain` research
+  // prompt on {mcp, live, tool, skill} with the whole list already generic.
+  const weakKeywordOnly = terms.length > 0 && specificTerms.length === 0;
   // Composite, not a single score/threshold ratio (docs/intent-gate-bakeoff.md
   // / Codex point 3): a candidate that barely cleared the peakedness gate, or
   // has no direct lexical evidence (dense/graph-only), must not read as

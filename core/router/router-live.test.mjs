@@ -87,3 +87,17 @@ test("clean state: a capability-vocab-saturated research action abstains (intent
   const result = await route("research MCP availability for dynamic agent capabilities");
   assert.deepEqual(result, [], `expected abstain on capability-domain research, got ${result.map((r) => r.id).join(",")}`);
 });
+
+// The eval's `intent-research-mcp-domain` prompt — the longer form of the case
+// above, and the one that kept escaping after that fix. Two leaks the short
+// prompt does not reach: "live"/"dynamic" were not yet generic, and curated
+// entries were exempt from weakKeywordOnly entirely, so this repo's own
+// portawhip skill matched it on {mcp, live, tool, skill} with every one of
+// those already classed broad. Both are registry-wide, so assert against the
+// real index rather than the synthetic one in the precision regressions.
+test("clean state: the long capability-vocab research prompt abstains, curated entries included", async () => {
+  const result = await route(
+    "research MCP availability and live precision for dynamic tools and skills and future agents",
+  );
+  assert.deepEqual(result, [], `expected abstain on capability-domain research, got ${result.map((r) => r.id).join(",")}`);
+});
