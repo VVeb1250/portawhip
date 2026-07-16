@@ -161,6 +161,16 @@ test("mcp-server: pull feedback never persists the reasoned summary text", async
       assert.ok(!("query" in event));
       assert.ok(!("prompt" in event));
     }
+    // The emitted stats must describe what actually went on the wire: the server
+    // logs one `suggested` event per emission right after the route event, so
+    // the two must agree. Scoped to this call's tail of the log — the file
+    // accumulates across every test in this file.
+    const routeIndex = events.map((item) => item.type).lastIndexOf("route");
+    const routeEvent = events[routeIndex];
+    const emitted = events.slice(routeIndex + 1).filter((item) => item.type === "suggested");
+    assert.ok(emitted.length > 0, "this query must route, or the assertion below passes vacuously");
+    assert.equal(routeEvent.emittedCount, emitted.length);
+    assert.equal(routeEvent.emittedStates.length, routeEvent.emittedCount);
   } finally {
     restoreFeedback();
   }

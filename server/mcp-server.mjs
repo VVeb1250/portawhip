@@ -70,6 +70,13 @@ server.tool(
       resultCount: result.results.length,
       suppressedCount: result.suppressed.length,
       topIds: result.results.slice(0, 3).map((hit) => hit.id),
+      // What retrieval found vs what the ledger actually put on the wire are
+      // different numbers once mute/reuse exist, and the fields above are the
+      // former. docs/recognition-router.md's stage-size and repeat-rate metrics
+      // are about the latter, so log it rather than infer it later from a count
+      // that was never measuring emissions.
+      emittedCount: compact.results?.length ?? 0,
+      emittedStates: compact.results?.map((hit) => hit.state) ?? [],
       latencyMs: result.latency_ms,
       emptyReason: result.negative_evidence?.reason ?? null,
     });
