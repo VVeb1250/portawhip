@@ -60,3 +60,21 @@ test("session ledger: used feedback from a hook makes the next pull a reuse", ()
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+test("session ledger: a used event from a past session stays fresh", () => {
+  const root = mkdtempSync(join(tmpdir(), "portawhip-ledger-past-"));
+  try {
+    // A `used` event older than this ledger belongs to a prior session — the
+    // model in THIS session has never seen the capability, so it must arrive as
+    // a full fresh payload, not a contentless reuse nudge.
+    logEvent(root, { type: "used", id: HIT.id, source: "hook", ts: 1000 });
+    const ledger = createSessionLedger({ feedbackRoot: root });
+
+    const emitted = ledger.emit([HIT]);
+
+    assert.equal(emitted[0].state, "fresh");
+    assert.equal(emitted[0].how_to_use, HIT.how_to_use);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});

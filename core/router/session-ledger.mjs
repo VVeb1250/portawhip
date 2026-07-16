@@ -11,7 +11,7 @@ export function emissionState({ timesSuggested = 0, used = false } = {}) {
   return "mute";
 }
 
-export function createSessionLedger({ feedbackRoot = null } = {}) {
+export function createSessionLedger({ feedbackRoot = null, since = Date.now() } = {}) {
   const entries = new Map();
 
   const getEntry = (id) => {
@@ -26,10 +26,18 @@ export function createSessionLedger({ feedbackRoot = null } = {}) {
     return entries.get(id);
   };
 
+  // Only this session's own `used` events promote a hit to reuse. The feedback
+  // log is append-only across sessions, so an unfiltered read would surface a
+  // capability used in some past session as a contentless reuse nudge the FIRST
+  // time this session sees it — inverting R5's per-session working-memory model
+  // (the more a capability is used, the less findable it becomes). `since` is
+  // the ledger's creation time (the MCP server builds it at boot = session edge).
   const syncUsedEvents = () => {
     if (!feedbackRoot) return;
     for (const event of readEvents(feedbackRoot)) {
-      if (event.type === "used" && event.id) getEntry(event.id).used = true;
+      if (event.type === "used" && event.id && (event.ts ?? 0) >= since) {
+        getEntry(event.id).used = true;
+      }
     }
   };
 
