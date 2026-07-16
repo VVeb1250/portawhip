@@ -38,12 +38,18 @@ export function sparseRetrieve(docs, query, { k = 20, minScore = 2 } = {}) {
     fields: FIELDS,
     idField: "id",
     // Our own stemmer/stopword filter (core/tokenize.mjs) runs on both doc
-    // fields and the query, so common connector words never contribute
-    // noise in the first place — default fuzzy+prefix (needed for raw,
-    // unstemmed English) turned out to reward broad partial matches on
-    // ordinary sentences over a strong single-term hit (verified: ripgrep
-    // ranked 5th, behind 4 unrelated docs, on "grep for TODO comments in
-    // this codebase" with fuzzy:0.2/prefix:true/no pre-stemming).
+    // fields and the query — default fuzzy+prefix (needed for raw, unstemmed
+    // English) turned out to reward broad partial matches on ordinary
+    // sentences over a strong single-term hit (verified: ripgrep ranked 5th,
+    // behind 4 unrelated docs, on "grep for TODO comments in this codebase"
+    // with fuzzy:0.2/prefix:true/no pre-stemming).
+    //
+    // This used to claim common connector words "never contribute noise in the
+    // first place". They do: the list covers ~28 words, and ordinary speech
+    // ("that", "you", "like", "not", "vs", "think") sails through and scores.
+    // It holds for a distilled route() query, which is what reaches this engine
+    // on the pull path — see tokenize.mjs for the measurement and for why the
+    // list is deliberately not grown past that.
     tokenize,
     searchOptions: { boost: BOOST, fuzzy: 0.1, prefix: false, combineWith: "OR" },
   });

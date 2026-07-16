@@ -1,8 +1,23 @@
-// Small shared tokenizer used by capability-graph-compiler.mjs for simple
-// token-overlap edge scoring (Set intersection, not a search engine — no
-// "existing library" concern for something this small). The actual
-// retrieval engine (core/sparse-retriever.mjs) delegates to minisearch
-// instead of hand-rolling this kind of logic.
+// Shared tokenizer, with TWO consumers — capability-graph-compiler.mjs for
+// token-overlap edge scoring, and core/sparse-retriever.mjs, which passes this
+// function to minisearch as the tokenizer for both documents and queries. So
+// anything this file does not filter becomes a live retrieval term. (An earlier
+// version of this comment claimed the retrieval engine "delegates to minisearch
+// instead of hand-rolling this kind of logic" — it delegates the index and the
+// scoring, not the tokenizing.)
+//
+// The list below is sized for distilled route() queries — "find the code that
+// parses the auth token" — not for raw conversational prompts, and that is a
+// deliberate scope, not an oversight. Measured 2026-07-16 on 194 held-out
+// prompts across 12 disciplines: feeding raw chat straight in (the push-hook
+// path) leaves abstain accuracy at 26%, because a chatty message shares dozens
+// of function words with dozens of documents. Expanding this list to full
+// conversational English was tried and lifts that to only 39% while costing real
+// matches — the push path's problem is that raw chat contains no requested
+// action to retrieve on, which no stopword list fixes. On the pull path, where
+// the assistant distills the action first, the same expansion changed nothing at
+// all (61.5% -> 61.5%), so it was not shipped. Grow this list when a distilled
+// QUERY is shown to carry noise; do not grow it to prop up raw-prompt routing.
 
 const STOPWORDS = new Set([
   "a", "an", "and", "are", "as", "at", "be", "by", "for", "from", "how",
