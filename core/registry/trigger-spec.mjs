@@ -24,6 +24,11 @@ function cleanList(values) {
   return result;
 }
 
+// Below this, an entry's metadata is too sparse to be reachable by any natural
+// query and the fallbacks are worth their cost. At or above it, they are pure
+// downside — see MIN_POSITIVES' use for why.
+const MIN_POSITIVES = 3;
+
 export function normalizeTriggerSpec({ id, type, triggers, skipWhen } = {}) {
   const safeId = String(id ?? "").trim();
   const positives = cleanList(triggers);
@@ -33,9 +38,19 @@ export function normalizeTriggerSpec({ id, type, triggers, skipWhen } = {}) {
     positives.push(cleaned);
   };
 
-  add(safeId);
-  add(`use ${safeId}`);
-  add((FALLBACK_TRIGGER[type] ?? ((value) => `${value} capability`))(safeId));
+  // Fallbacks are for sparse metadata only, exactly as this module's header
+  // describes. Injecting them into an entry that already carries hand-written
+  // triggers costs abstain accuracy: the hybrid engine tokenizes triggers, so
+  // `${id} tool` puts the bare generic term "tool" into the index and every
+  // prompt containing that word partially matches the capability. Found live —
+  // "explain how graph retrieval might help tool selection" (a hard-negative
+  // research question) started routing codegraph purely via "tool", dropping
+  // eval abstainAccuracy 0.95 -> 0.90.
+  if (positives.length < MIN_POSITIVES) {
+    add(safeId);
+    add(`use ${safeId}`);
+    add((FALLBACK_TRIGGER[type] ?? ((value) => `${value} capability`))(safeId));
+  }
 
   return {
     triggers: positives,

@@ -29,6 +29,28 @@ test("trigger specs: every curated route has request-language positives and nega
   }
 });
 
+test("trigger specs: an entry with hand-written triggers gets no generic fallbacks", () => {
+  // The hybrid engine tokenizes triggers, so a `${id} tool` fallback puts the
+  // bare term "tool" into the index and every prompt containing that word
+  // partially matches. Injecting fallbacks into an entry that is already
+  // reachable is therefore pure downside — it cost one hard-negative
+  // (eval `hard-graph-rag`, abstainAccuracy 0.95 -> 0.90) before this guard.
+  const spec = normalizeTriggerSpec({
+    id: "codegraph",
+    type: "mcp",
+    triggers: ["codegraph", "symbols", "call paths", "callers"],
+    skipWhen: ["plain text search"],
+  });
+
+  assert.deepEqual(spec.triggers, ["codegraph", "symbols", "call paths", "callers"]);
+  for (const generic of ["tool", "use", "capability"]) {
+    assert.ok(
+      !spec.triggers.some((trigger) => trigger.toLowerCase().split(/\s+/).includes(generic)),
+      `"${generic}" must not enter the trigger vocabulary of an already-reachable entry`,
+    );
+  }
+});
+
 test("trigger specs: discovery fallbacks always provide at least three positive phrases", () => {
   const spec = normalizeTriggerSpec({
     id: "example-tool",
