@@ -6,6 +6,8 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 
+import { assertRouteContract } from "../core/router/route-contract.mjs";
+
 // Live integration test - spawns the REAL MCP server and calls route() over
 // real stdio JSON-RPC, no mocks. The unit tests in core/router.test.mjs inject
 // a fake extractor, which by design mocks away the exact thing that broke in
@@ -126,6 +128,7 @@ test("mcp-server: concise router-analysis actions can still abstain", async () =
   ];
   for (const summary of summaries) {
     const { result } = await callRoute(summary);
+    assertRouteContract(result);
     assert.equal(result.status, "empty", summary);
     assert.deepEqual(Object.keys(result).sort(), ["reason", "status"], summary);
     assert.match(result.reason, /threshold|weak|keyword/i, summary);
@@ -134,6 +137,9 @@ test("mcp-server: concise router-analysis actions can still abstain", async () =
 
 test("mcp-server: reasoned actionable summary still routes the curated capability", async () => {
   const { result } = await callRoute("import an installed CLI and synchronize it across agent hosts");
+  // The real payload the wire carries, checked against the published contract —
+  // strict, so an internal scoring field leaking in fails here, not downstream.
+  assertRouteContract(result);
   assert.equal(result.status, "success");
   const portawhip = result.results.find((hit) => hit.id === "portawhip");
   assert.ok(portawhip);
