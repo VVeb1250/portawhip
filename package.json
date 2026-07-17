@@ -2,7 +2,7 @@
   "name": "portawhip",
   "private": false,
   "type": "module",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "Tools collector + context-cheap router for AI agent hosts: dispatches capability install to add-mcp/mise/asm, then routes the right one at the right moment instead of loading everything into context.",
   "license": "MIT",
   "homepage": "https://github.com/VVeb1250/portawhip#readme",

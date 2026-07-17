@@ -2,6 +2,25 @@
 
 All notable user-facing changes are documented here.
 
+## [0.5.0](https://github.com/VVeb1250/portawhip/compare/portawhip-v0.4.0...portawhip-v0.5.0) (2026-07-17)
+
+
+### Features
+
+* add recognition router emit contract ([263a396](https://github.com/VVeb1250/portawhip/commit/263a3961db5af8379ed5321791f5141234ec315b))
+* enforce the published route payload contract with a strict schema ([16fe3cc](https://github.com/VVeb1250/portawhip/commit/16fe3ccdd28c2b32686b15a46f0c77024e0fa961))
+* give the pull path its own retrieval bar ([c4a945f](https://github.com/VVeb1250/portawhip/commit/c4a945f3958e2fd514246b56b69b579cc43c8950))
+* log what the ledger emitted, not just what retrieval found ([85d95bf](https://github.com/VVeb1250/portawhip/commit/85d95bfcf21f4ba54036f7bdeae46cba64797dda))
+
+
+### Bug Fixes
+
+* abstain on capability-vocabulary research prompts again ([ce3c056](https://github.com/VVeb1250/portawhip/commit/ce3c056a82cdbf1581cc8bb71985c28907260351))
+* compact default router output ([733db92](https://github.com/VVeb1250/portawhip/commit/733db926aadbfd4bbecaa32aa50d4eeb627880f4))
+* **deps:** restore npm 10 lockfile compatibility ([d9fe4ba](https://github.com/VVeb1250/portawhip/commit/d9fe4baa484541df5bfe4dcc762b15866f20c092))
+* scope session-ledger reuse state to the current session ([707fb23](https://github.com/VVeb1250/portawhip/commit/707fb2326482678ce41c53b40c7dbdb1541172c2))
+* stop injecting generic trigger fallbacks into reachable capabilities ([95a24bb](https://github.com/VVeb1250/portawhip/commit/95a24bb56e720fb30aae954a4256978add673605))
+
 ## [0.4.0](https://github.com/VVeb1250/portawhip/compare/portawhip-v0.3.0...portawhip-v0.4.0) (2026-07-14)
 
 
