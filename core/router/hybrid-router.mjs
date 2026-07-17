@@ -258,8 +258,10 @@ export async function routeHybrid(
   {
     threshold = 2,
     hybridThreshold,
+    pullHybridThreshold,
     hybridRecipeThreshold,
     hybridToolThreshold,
+    mode = "explicit",
     graphPath = null,
     graphBoost = 0.25,
     k = 5,
@@ -277,7 +279,28 @@ export async function routeHybrid(
   } = {},
 ) {
   const docs = buildCapabilityDocs(index);
-  const autoBar = hybridThreshold ?? threshold;
+  // Two bars, because the two paths are not fed the same thing.
+  //
+  // hybridThreshold is calibrated (docs/archive/phase2.5-verify.md) against an
+  // eval set of RAW prompts, where the engine must itself tell an actionable
+  // request from someone thinking out loud — and 350 is what it costs to do
+  // that, paid for in real matches thrown away.
+  //
+  // route() is never handed a raw prompt. Its contract makes the assistant
+  // state "only the positively requested action and its direct object", and
+  // measured on 194 held-out prompts (docs/router-eval-holdout.md) that gate is
+  // perfect: 72/72 discussion prompts never reached the router, 122/122 real
+  // requests did. So on this path 350 is defending against a threat that has
+  // already been removed, and it costs recall for nothing — the answer sits in
+  // the candidate pool for 70.6% of requests at 100, against 49% at 350.
+  //
+  // The low bar is only safe because the caller is a model choosing from
+  // candidates, not a switch executing a verdict: the same measurement had the
+  // model reject 20 of 20 noise suggestions the low bar admits. Do NOT lower
+  // hybridThreshold to match — on the raw-prompt path nothing filters the noise.
+  // See router.config.yaml for why the shipped value is 150 rather than the
+  // sweep's nominal best.
+  const autoBar = (mode === "pull" ? pullHybridThreshold : null) ?? hybridThreshold ?? threshold;
   // Curated (recipe.yaml) entries need their own, much lower bar — same
   // rationale as scorer.mjs's recipeThreshold split. Confirmed empirically:
   // generic domain vocabulary ("architecture", "patterns") that's common

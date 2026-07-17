@@ -28,6 +28,31 @@ recipeThreshold: 1
 # that regress-test the old noisy hook) while keeping all 5 original Phase-2
 # positives; costs 4 of 7 newer p25 positives (accepted: silence > wrong guess).
 hybridThreshold: 350
+# The pull path (MCP route()) does not get a raw prompt, so it does not need the
+# bar that reading raw prompts costs. route()'s contract makes the assistant
+# distil "the positively requested action and its direct object" first, and
+# docs/router-eval-holdout.md measured that gate over 194 held-out prompts from
+# 12 disciplines: 72/72 discussion prompts never called route, 122/122 real
+# requests did. Nothing chatty arrives here for 350 to defend against.
+#
+# What 350 costs on this path: the right capability is in the returned set for
+# 49% of real requests at 350, and 70.6% at 100.
+#
+# Why this is affordable at all: route() returns candidates for a model to pick
+# from, not a verdict to act on. Handed the top 5 at a low bar, the model reached
+# 60.8% (from 27.5%) and declined 20 of the 20 noise suggestions the low bar
+# admits. A bar this low would be reckless under the old verdict contract.
+#
+# Why 150 and not 100: the sweep is a plateau, not a slope — 100 buys 62.7% and
+# 150 buys 61.8%, nine tenths of a point — but somewhere in between the router
+# stops abstaining on its own meta-vocabulary. At 100 "compare capability-router
+# architecture choices" matches ito-basket-compare on the bare word "compare";
+# at 150 and above it is silent, as it is at 250 and 350. That FP class has been
+# fought twice (docs/intent-gate-bakeoff.md, then again 2026-07-17) and is not
+# worth 0.9 points. 150 is the knee: essentially all of the recall, none of the
+# regression. Do NOT lower hybridThreshold to match this — on the raw-prompt
+# path nothing upstream filters the noise.
+pullHybridThreshold: 150
 hybridRecipeThreshold: 130
 # Auto-discovered MCP/CLI tools are a third bucket, not "skills with a lower
 # bar": add-mcp/mise give no description, so their documents are just a bare

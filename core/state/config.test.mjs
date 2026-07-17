@@ -43,6 +43,52 @@ test("runtime config layers package, user, and project values", () => {
   }
 });
 
+// normalizeConfig is a hand-written allowlist, so a key added to DEFAULTS and to
+// router.config.yaml but not to that list is dropped in silence: the packaged
+// value looks present in both files and arrives at the router as undefined. That
+// is how pullHybridThreshold shipped broken for one commit — unit tests passed
+// because they hand the option in directly, and only an end-to-end read caught
+// it. Guard every routing knob users can set, not just the new one.
+test("every packaged routing default survives the config allowlist", () => {
+  const { root, home, project } = fixture();
+  try {
+    const basePath = join(root, "router.config.yaml");
+    writeFileSync(basePath, "k: 4\n");
+    const config = loadRuntimeConfig({ basePath, cwd: project, home, env: {}, platform: "linux" });
+
+    for (const key of [
+      "engine",
+      "threshold",
+      "recipeThreshold",
+      "hybridThreshold",
+      "pullHybridThreshold",
+      "hybridRecipeThreshold",
+      "hybridToolThreshold",
+      "graphBoost",
+      "peakednessRatio",
+      "denseThreshold",
+      "pushMode",
+      "pushMinConfidence",
+    ]) {
+      assert.notEqual(config[key], undefined, `${key} is defaulted but never reaches a caller`);
+    }
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("a pull threshold set in a config file reaches the router", () => {
+  const { root, home, project } = fixture();
+  try {
+    const basePath = join(root, "router.config.yaml");
+    writeFileSync(basePath, "pullHybridThreshold: 42\n");
+    const config = loadRuntimeConfig({ basePath, cwd: project, home, env: {}, platform: "linux" });
+    assert.equal(config.pullHybridThreshold, 42);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("PORTAWHIP_CONFIG is the highest-priority explicit config", () => {
   const { root, home, project } = fixture();
   try {

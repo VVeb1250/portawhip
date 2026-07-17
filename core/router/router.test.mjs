@@ -471,6 +471,52 @@ test("hybrid: broad vocabulary matches are suppressed as keyword-only noise", as
   assert.equal(result[0].action, "ignore_by_default");
 });
 
+// R6 (docs/recognition-router.md, measured in docs/router-eval-holdout.md): the
+// pull path is handed a distilled action by an assistant that already filtered
+// out chat, so it does not pay the bar that reading raw prompts costs.
+const barProbeIndex = {
+  entries: [
+    {
+      id: "to-prd",
+      type: "skill",
+      origin: "auto:skill",
+      path: "/skills/to-prd",
+      route: {
+        triggers: ["to-prd", "prd"],
+        description: "Turn the current conversation context into a PRD and publish it to the project issue tracker",
+      },
+    },
+  ],
+};
+
+// The bars here are sized for this one-document index, NOT production's
+// 350/100. minisearch scores on IDF, so absolute scores scale with corpus size:
+// the query below scores 5.2 against this single doc and 110.7 against the real
+// 645-capability registry. What is under test is the MECHANISM — that mode
+// selects which bar applies — and pinning production's numbers here would only
+// pin a fiction. Their calibration lives in router.config.yaml's comments and is
+// measured by `npm run route:eval` / docs/router-eval-holdout.md.
+const PROMPT = "write a PRD for a self-serve upgrade flow";
+const barProbeOpts = { k: 5, denseEnabled: false, graphPath: "missing-capability-graph.json" };
+
+test("hybrid: pull mode uses the pull bar, and the raw-prompt bar still applies elsewhere", async () => {
+  const opts = { ...barProbeOpts, hybridThreshold: 10, pullHybridThreshold: 1 };
+
+  const pull = await routeHybrid(barProbeIndex, PROMPT, { ...opts, mode: "pull" });
+  assert.ok(pull.some((entry) => entry.id === "to-prd"), `pull mode must clear the pull bar, got ${pull.map((e) => e.id)}`);
+
+  // Same index, same query, same call — only the mode differs. The asymmetry is
+  // the feature: the high bar exists to survive unfiltered chat, and only the
+  // pull path has something upstream that filters it.
+  const explicit = await routeHybrid(barProbeIndex, PROMPT, opts);
+  assert.deepEqual(explicit, [], `default mode must keep the raw-prompt bar, got ${explicit.map((e) => e.id)}`);
+});
+
+test("hybrid: a config with no pull bar falls back to the raw-prompt bar, not to zero", async () => {
+  const result = await routeHybrid(barProbeIndex, PROMPT, { ...barProbeOpts, hybridThreshold: 10, mode: "pull" });
+  assert.deepEqual(result, [], `missing pullHybridThreshold must fall back to hybridThreshold, got ${result.map((e) => e.id)}`);
+});
+
 test("hybrid: suggest filters split skills from tools", async () => {
   const index = {
     entries: [
