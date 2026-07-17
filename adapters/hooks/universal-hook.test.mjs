@@ -139,39 +139,27 @@ test("universal-hook: gemini-cli defaults hookEventName to BeforeAgent when no n
   }
 });
 
-test("actionDirective: skill on claude-code names the Skill tool by id", () => {
-  const directive = actionDirective({ kind: "skill", id: "workspace-surface-audit", pointer: "/some/path" }, "claude-code");
-  assert.match(directive, /Skill tool/);
-  assert.match(directive, /"workspace-surface-audit"/);
-});
+// One table for one pure function. The invariant across every row is the same:
+// on claude-code the directive names that host's real invocation syntax, and on
+// any other host it must fall back to the pointer rather than invent syntax that
+// host does not have.
+const SKILL = { kind: "skill", id: "workspace-surface-audit", pointer: "/some/path" };
+const MCP = { kind: "tool", type: "mcp", id: "playwright", pointer: "@playwright/mcp@latest" };
 
-test("actionDirective: skill on a non-claude-code host falls back to reading the pointer", () => {
-  const directive = actionDirective({ kind: "skill", id: "workspace-surface-audit", pointer: "/some/path" }, "gemini-cli");
-  assert.doesNotMatch(directive, /Skill tool/);
-  assert.match(directive, /\/some\/path/);
-});
-
-test("actionDirective: mcp on claude-code gives the mcp__<id>__ prefix and a ToolSearch fallback", () => {
-  const directive = actionDirective({ kind: "tool", type: "mcp", id: "playwright", pointer: "@playwright/mcp@latest" }, "claude-code");
-  assert.match(directive, /mcp__playwright__/);
-  assert.match(directive, /ToolSearch/);
-});
-
-test("actionDirective: mcp on a non-claude-code host stays generic, no invented syntax", () => {
-  const directive = actionDirective({ kind: "tool", type: "mcp", id: "playwright", pointer: "@playwright/mcp@latest" }, "codex");
-  assert.doesNotMatch(directive, /mcp__/);
-});
-
-test("actionDirective: agent on claude-code names the Agent tool by subagent_type", () => {
-  const directive = actionDirective({ kind: "agent", id: "e2e-runner", pointer: "/agents/e2e-runner.md" }, "claude-code");
-  assert.match(directive, /Agent tool/);
-  assert.match(directive, /"e2e-runner"/);
-});
-
-test("actionDirective: cli surfaces the pointer as a runnable command", () => {
-  const directive = actionDirective({ kind: "tool", type: "cli", id: "ripgrep", pointer: "mise exec -- ripgrep" }, "claude-code");
-  assert.match(directive, /mise exec -- ripgrep/);
-});
+for (const { name, hit, host, expect, reject } of [
+  { name: "skill on claude-code names the Skill tool by id", hit: SKILL, host: "claude-code", expect: [/Skill tool/, /"workspace-surface-audit"/] },
+  { name: "skill elsewhere falls back to reading the pointer", hit: SKILL, host: "gemini-cli", expect: [/\/some\/path/], reject: [/Skill tool/] },
+  { name: "mcp on claude-code gives the mcp__<id>__ prefix and a ToolSearch fallback", hit: MCP, host: "claude-code", expect: [/mcp__playwright__/, /ToolSearch/] },
+  { name: "mcp elsewhere stays generic, inventing no syntax", hit: MCP, host: "codex", reject: [/mcp__/] },
+  { name: "agent on claude-code names the Agent tool by subagent_type", hit: { kind: "agent", id: "e2e-runner", pointer: "/agents/e2e-runner.md" }, host: "claude-code", expect: [/Agent tool/, /"e2e-runner"/] },
+  { name: "cli surfaces the pointer as a runnable command", hit: { kind: "tool", type: "cli", id: "ripgrep", pointer: "mise exec -- ripgrep" }, host: "claude-code", expect: [/mise exec -- ripgrep/] },
+]) {
+  test(`actionDirective: ${name}`, () => {
+    const directive = actionDirective(hit, host);
+    for (const pattern of expect ?? []) assert.match(directive, pattern);
+    for (const pattern of reject ?? []) assert.doesNotMatch(directive, pattern);
+  });
+}
 
 test("resolveId: a CLI binary name with a regex metacharacter still matches its own command", () => {
   // "." is unescaped-regex "any character" - a dot-containing name sitting

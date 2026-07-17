@@ -273,26 +273,25 @@ test("compactRouteResult: empty routes contain only status and reason", () => {
   });
 });
 
-test("curated aliases: harness audit routes to workspace surface audit", async () => {
+// One table, one index build. These were three near-identical tests that each
+// rebuilt the whole index (loadIndex never caches) to assert the same shape on a
+// different prompt; adding the fourth alias should cost a row, not a copy.
+test("curated aliases: recipe phrasings route to the capability they name", async () => {
   const index = await buildIndex("recipe.yaml", { discover: false });
-  const result = await explainRoute(index, "audit connector hook find bugs in harness config", CONFIG);
-  assert.equal(result.results[0].id, "workspace-surface-audit");
-  assert.equal(result.results[0].action, "read_skill");
-});
+  const cases = [
+    { prompt: "audit connector hook find bugs in harness config", top: "workspace-surface-audit", action: "read_skill" },
+    { prompt: "fix settings.json hook for Claude Code config", top: "configure-ecc", action: "read_skill" },
+    // This one also pins that a second capability rides along, so it keeps its
+    // own extra assertion rather than being flattened into the table.
+    { prompt: "fix bug run tests and commit after code review", top: "code-review", alsoIncludes: "verification-loop" },
+  ];
 
-test("curated aliases: fix-test-commit routes to review and verification", async () => {
-  const index = await buildIndex("recipe.yaml", { discover: false });
-  const result = await explainRoute(index, "fix bug run tests and commit after code review", CONFIG);
-  const ids = result.results.map((hit) => hit.id);
-  assert.equal(ids[0], "code-review");
-  assert.ok(ids.includes("verification-loop"));
-});
-
-test("curated aliases: settings hook repair routes to configure-ecc", async () => {
-  const index = await buildIndex("recipe.yaml", { discover: false });
-  const result = await explainRoute(index, "fix settings.json hook for Claude Code config", CONFIG);
-  assert.equal(result.results[0].id, "configure-ecc");
-  assert.equal(result.results[0].action, "read_skill");
+  for (const { prompt, top, action, alsoIncludes } of cases) {
+    const ids = (await explainRoute(index, prompt, CONFIG)).results;
+    assert.equal(ids[0]?.id, top, prompt);
+    if (action) assert.equal(ids[0].action, action, prompt);
+    if (alsoIncludes) assert.ok(ids.map((h) => h.id).includes(alsoIncludes), `${prompt} -> ${ids.map((h) => h.id)}`);
+  }
 });
 
 test("route-only entries are skipped by the loader", () => {
