@@ -115,7 +115,47 @@ close: return the candidates, let the model pick. It also reprioritises the
 threshold work — a lower bar is only affordable once noise is cheap, which it
 becomes precisely when the model, not the router, makes the final call.
 
-**Ship R6 first. Then re-run this sweep.**
+Measured next.
+
+## Result 4b — R6 works, and it makes the low bar free
+
+Same prompts, same blind labels. The router returns its top 5 at bar 100 with
+each candidate's description; separate agents, shown only the user's message and
+that list, pick one or decline. Then scored against the labels.
+
+| config | hit rate on answerable requests | noise eaten (of the 20 "nothing fits") |
+|---|---|---|
+| router alone @350 — **what ships today** | **27.5%** | 5/20 |
+| router alone @100 | 34.3% | 19/20 |
+| **R6 @100 — model picks from 5 candidates** | **60.8%** | **0/20** |
+
+- **60.8% (62/102)** — more than double the shipped router, on requests from
+  disciplines its registry was never built for.
+- **86.1% (62/72) precision when the answer was reachable.** Given the right
+  capability anywhere in the set, the model finds it nearly nine times in ten.
+  The model is a competent reranker, and it is already in the loop for free —
+  the standard fix for a top-1/top-3 gap is a cross-encoder reranker, and this
+  buys the same thing with no new model, no cold load, and no dependency.
+- **20/20 noise rejected.** Every prompt where the labeller said nothing fits,
+  the router fired at bar 100 and the model declined. **The entire cost of
+  lowering the threshold disappears once the model makes the final call** —
+  which is exactly the claim, now measured rather than assumed.
+- **70.6% (72/102) ceiling.** R6 cannot pick what retrieval never surfaced. The
+  remaining ~30% is a genuine retrieval miss.
+
+This settles the build order. R6 is worth +33 points and costs nothing;
+retrieval work is worth at most the 10 points between 60.8% and today's ceiling
+until R6 exists to convert it.
+
+**It also rehabilitates step 1.** Trigger-spec extraction was a no-op for
+router-alone top-1 (Result 5) because the threshold discarded it — but the
+ceiling it would move is the 70.6%, and that ceiling only becomes the binding
+constraint after R6 lands. Several of the 7 cases where the model declined a
+good candidate are description-quality failures, not judgement failures: the
+agent rejected `evm-mcp-server` reasoning *"if that description is truncated and
+the server actually exposes ERC-20 transfer history, it would be the right
+pick"*. Step 1 and the 160-char truncation are R6's material, and they should be
+measured against R6, not against the old contract.
 
 ## Result 5 — step 1 (trigger-spec enrichment) is not the lever
 
@@ -187,16 +227,21 @@ The gate is perfect, but three things are decided by inference, not instruction:
 
 ## What this changes
 
-1. **Cut the push hook, or re-scope it.** 76% false-positive on discussion at the
+1. **Build R6 (recognition set) next.** Measured +33 points (27.5% → 60.8%) for
+   no new dependency, and it is what makes every other change affordable.
+2. **Lower the skill threshold to ~100 — but only together with R6.** Alone it
+   trades 14 right answers for 30 wrong ones. Behind R6 the model rejected 20/20
+   of the noise it lets through, and the trade becomes free.
+3. **Cut the push hook, or re-scope it.** 76% false-positive on discussion at the
    production threshold. If it stays, it cannot be a suggester; it can only be an
    amplifier for cases that are certain, and 350 is not certain.
-2. **Build R6 (recognition set) next**, not step 1 and not a threshold change.
-   The top-1/top-3 gap is the largest measured, and it is the one R6 targets.
-3. **Then re-run this sweep.** A lower bar becomes affordable exactly when the
-   model does the picking.
-4. **Fix the placeholder descriptions and the id collision** — cheap, and they
-   are pure loss today.
-5. **Spell out the four instruction gaps** before more assistants have to guess.
+4. **Then retrieval quality — including step 1.** After R6 the binding constraint
+   is the 70.6% ceiling, which is exactly what trigger-spec extraction and the
+   160-char description truncation govern. Measure them against R6.
+5. **Fix the placeholder descriptions and the id collision** — cheap, and they
+   are pure loss today. Two independent agents deduced the motion skills from
+   their names alone because their descriptions carry no information.
+6. **Spell out the four instruction gaps** before more assistants have to guess.
 
 ## Honest limits
 
