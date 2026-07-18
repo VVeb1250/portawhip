@@ -7,6 +7,8 @@ import { listAll } from "./scorer.mjs";
 import { runRoute } from "./route-entry.mjs";
 import { compileCapabilityGraph, writeCapabilityGraph } from "../registry/capability-graph-compiler.mjs";
 import { runRouterEval, runRouterEvalComparison, loadEvalSet } from "./router-eval.mjs";
+import { runLooEval } from "./loo-eval.mjs";
+import { runBlindEval } from "./blind-eval.mjs";
 import { loadRuntimeConfig } from "../state/config.mjs";
 import { computeFactors } from "../state/feedback.mjs";
 import { stackFactors, combineFactors } from "../state/stack-detect.mjs";
@@ -52,6 +54,8 @@ function printUsage() {
   console.log(`usage:
   node core/router/router-cli.mjs route --prompt "..." [--engine hybrid|keyword] [--no-dense|--dense-block]
   node core/router/router-cli.mjs eval [--engine hybrid|keyword]
+  node core/router/router-cli.mjs blind [--engine hybrid|two-stage] [--field distilled|prompt]
+  node core/router/router-cli.mjs loo [--engine hybrid|two-stage] [--limit N]
   node core/router/router-cli.mjs compare
   node core/router/router-cli.mjs enrich
   node core/router/router-cli.mjs harvest-negatives
@@ -141,6 +145,73 @@ async function main() {
         2,
       ),
     );
+    return;
+  }
+
+  // Leave-one-out over the whole registry — no human labels, every capability
+  // queried with its own description. See core/router/loo-eval.mjs for what it
+  // does and does not prove: relative instrument, optimistic absolute level,
+  // read it for deltas rather than headline numbers.
+  if (command === "loo") {
+    const config = runtimeConfig(args, root);
+    const opts = {
+      ...config,
+      k: args.k ? Number(args.k) : config.k,
+      denseEnabled: args["no-dense"] ? false : config.denseEnabled,
+      factors: combineFactors(
+        computeFactors(dirname(resolve(primaryRecipe))),
+        stackFactors(index, process.cwd()),
+      ),
+    };
+    console.log(
+      JSON.stringify(
+        await runLooEval(index, opts, {
+          engine: args.engine ?? config.engine,
+          mode: args.mode ?? "pull",
+          limit: args.limit ?? null,
+          keepId: args["keep-id"] === true,
+          routeTypes: args.routeTypes ? String(args.routeTypes).split(",") : undefined,
+        }),
+        null,
+        2,
+      ),
+    );
+    return;
+  }
+
+  // Blind-prompt eval (core/router/blind-eval.mjs): prompts written and
+  // labelled by agents with no access to this registry. Unlike `eval`, whose
+  // author-written cases all score 1.0, this one can lose.
+  if (command === "blind") {
+    const config = runtimeConfig(args, root);
+    const opts = {
+      ...config,
+      k: args.k ? Number(args.k) : config.k,
+      denseEnabled: args["no-dense"] ? false : config.denseEnabled,
+      factors: combineFactors(
+        computeFactors(dirname(resolve(primaryRecipe))),
+        stackFactors(index, process.cwd()),
+      ),
+    };
+    const routeOptions = {};
+    if (args.topFamilies) routeOptions.topFamilies = Number(args.topFamilies);
+    if (args.familyCount) routeOptions.familyCount = Number(args.familyCount);
+    if (args.familyStrength !== undefined) routeOptions.familyStrength = Number(args.familyStrength);
+    if (args.union) routeOptions.twoStageUnion = true;
+    const engines = args.engine ? [args.engine] : ["hybrid", "two-stage"];
+    const report = {};
+    for (const engine of engines) {
+      const result = await runBlindEval(index, opts, {
+        setPath: args.set ?? runtimeFile("docs/router-blind-set.jsonl", root),
+        engine,
+        mode: args.mode ?? "pull",
+        field: args.field ?? "distilled",
+        routeOptions,
+      });
+      const { rows, ...rest } = result;
+      report[engine] = args.verbose ? result : rest;
+    }
+    console.log(JSON.stringify(report, null, 2));
     return;
   }
 

@@ -209,6 +209,52 @@ export async function denseRetrieve(docs, query, { k = 20, minScore = 0.6, block
   }
 }
 
+// Two-stage routing (core/router/two-stage-router.mjs) needs the same vectors
+// this module already computes, but addressed directly rather than through a
+// ranked retrieve: a query vector to compare against family centroids, and the
+// doc vectors to build those centroids from. Both reuse embeddingCache and the
+// disk cache, so a warm process pays nothing extra. Same fail-soft contract as
+// everything else here — null / empty map when the model isn't available,
+// never a throw into the caller.
+export async function embedText(text, { block = true } = {}) {
+  if (unavailable) return null;
+  ensureDiskCacheLoaded();
+  if (!extractor) {
+    const pending = startWarm();
+    if (!block) return null;
+    await pending;
+    if (!extractor) return null;
+  }
+  try {
+    return await embed(extractor, text);
+  } catch {
+    unavailable = true;
+    return null;
+  }
+}
+
+export async function getDocVectors(docs, { block = true } = {}) {
+  const vectors = new Map();
+  if (unavailable) return vectors;
+  ensureDiskCacheLoaded();
+  if (!extractor) {
+    const pending = startWarm();
+    if (!block) return vectors;
+    await pending;
+    if (!extractor) return vectors;
+  }
+  try {
+    for (const doc of docs) vectors.set(doc.id, await embedDoc(extractor, doc));
+    persistDiskCache();
+  } catch {
+    unavailable = true;
+    return new Map();
+  }
+  return vectors;
+}
+
+export { cosineSim as denseCosine };
+
 // Test-only seams: real model load takes seconds and needs network/disk, so
 // unit tests for hybrid-router's fusion logic inject a fake extractor (or
 // force the "unavailable"/"still loading" states) instead of paying that cost

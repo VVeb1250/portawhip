@@ -6,6 +6,7 @@
 
 import { route } from "./scorer.mjs";
 import { routeHybrid } from "./hybrid-router.mjs";
+import { routeTwoStage } from "./two-stage-router.mjs";
 import { annotateIntentEvidence } from "./intent-evidence.mjs";
 
 function pushIsSilent(config) {
@@ -18,7 +19,11 @@ export async function runRoute(index, prompt, config) {
   // callers remain available for characterization and evals.
   if (pushIsSilent(config)) return [];
   const candidates =
-    config.engine === "hybrid" ? await routeHybrid(index, prompt, config) : route(index, prompt, config);
+    config.engine === "two-stage"
+      ? await routeTwoStage(index, prompt, config)
+      : config.engine === "hybrid"
+        ? await routeHybrid(index, prompt, config)
+        : route(index, prompt, config);
   return annotateIntentEvidence(index, prompt, candidates, { mode: config.mode });
 }
 
@@ -88,9 +93,12 @@ export async function explainRoute(index, prompt, config) {
       latency_ms: Date.now() - startedAt,
     };
   }
-  const engineCandidates = config.engine === "hybrid"
-    ? await routeHybrid(index, prompt, { ...config, includeWeak: true })
-    : route(index, prompt, config);
+  const engineCandidates =
+    config.engine === "two-stage"
+      ? await routeTwoStage(index, prompt, { ...config, includeWeak: true })
+      : config.engine === "hybrid"
+        ? await routeHybrid(index, prompt, { ...config, includeWeak: true })
+        : route(index, prompt, config);
   const all = annotateIntentEvidence(index, prompt, engineCandidates, { mode: config.mode });
   const results = all.filter((item) => item.tier === "required" || item.tier === "recommended");
   const suppressed = all.filter((item) => item.tier !== "required" && item.tier !== "recommended");
