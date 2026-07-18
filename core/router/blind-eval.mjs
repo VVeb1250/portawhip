@@ -66,6 +66,12 @@ export async function runBlindEval(index, config, options = {}) {
     field = "distilled",
     routeOptions = {},
     types = ["skill", "agent"],
+    // Feeds the case's needServer/needTool to the two engine stages separately,
+    // which is what MCP-Zero's <tool_assistant> contract actually produces. The
+    // default (one query used at both levels) is a degenerate form of it, and
+    // measuring only that would test the hierarchy while withholding the thing
+    // that gives it two levels to work with.
+    splitQuery = false,
   } = options;
   const cases = loadBlindSet(setPath);
   const scopedIndex = restrictToLabelUniverse(index, types);
@@ -79,17 +85,24 @@ export async function runBlindEval(index, config, options = {}) {
   const rows = [];
 
   for (const testCase of cases) {
-    const query = testCase[field] ?? testCase.prompt;
-    // A non-actionable case has distilled:null by construction. On the pull
-    // path that IS the result — the assistant never calls route() — so score it
-    // as a correct abstention instead of silently falling back to the raw
-    // prompt, which would measure the push path while claiming to measure pull.
-    const skipped = field === "distilled" && !testCase.distilled;
+    // `prompt` is the raw message and always present; the derived query fields
+    // (distilled, need) are null exactly when the case is not a work request.
+    // On the pull path that null IS the outcome — the assistant never calls
+    // route() — so score it as a correct abstention rather than falling back to
+    // the raw prompt, which would measure the push path while claiming pull.
+    const rawField = field === "prompt";
+    const query = rawField ? testCase.prompt : testCase[field];
+    const skipped = !rawField && !query;
+    const perCase =
+      splitQuery && !skipped
+        ? { serverQuery: testCase.needServer ?? query, toolQuery: testCase.needTool ?? query }
+        : {};
     const results = skipped
       ? []
       : await runRoute(scopedIndex, query, {
           ...config,
           ...routeOptions,
+          ...perCase,
           engine,
           mode,
           denseBlock: true,

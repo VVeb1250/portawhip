@@ -206,6 +206,7 @@ async function main() {
         engine,
         mode: args.mode ?? "pull",
         field: args.field ?? "distilled",
+        splitQuery: args.split === true,
         routeOptions,
       });
       const { rows, ...rest } = result;
