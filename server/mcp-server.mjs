@@ -12,7 +12,7 @@ import { loadIndex } from "../core/registry/registry.mjs";
 import { listAll } from "../core/router/scorer.mjs";
 import { compactRouteResult, explainRoute } from "../core/router/route-entry.mjs";
 import { createSessionLedger, logPullEmissions } from "../core/router/session-ledger.mjs";
-import { loadRuntimeConfig } from "../core/state/config.mjs";
+import { loadRouterRuntimeConfig as loadRuntimeConfig } from "../core/router/router-config.mjs";
 import { computeFactors, logEvent } from "../core/router/feedback.mjs";
 import { stackFactors, combineFactors } from "../core/state/stack-detect.mjs";
 import { readActiveSelection, resolveRecipePaths } from "../core/state/bundle-state.mjs";

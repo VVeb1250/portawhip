@@ -11,6 +11,11 @@ import {
   nextChoiceDraft,
   runConfigWrite,
 } from "./tui-config.mjs";
+import { resolveSchema } from "../core/state/config.mjs";
+
+// The settings tab renders whatever the installed providers declare, so these
+// resolve the real schema rather than assuming a fixed key list.
+const schema = await resolveSchema();
 
 function fixtureRunner(calls) {
   return (argv) => {
@@ -28,7 +33,7 @@ function fixtureRunner(calls) {
 
 test("TUI settings rows show effective values and both override scopes", () => {
   const calls = [];
-  const rows = collectConfigRows({ runner: fixtureRunner(calls) });
+  const rows = collectConfigRows({ schema, runner: fixtureRunner(calls) });
 
   const dense = rows.find((row) => row.key === "denseEnabled");
   assert.equal(dense.effective, true);
@@ -54,8 +59,8 @@ test("TUI config writes delegate to the validated config command", () => {
   const calls = [];
   const runner = fixtureRunner(calls);
 
-  runConfigWrite({ action: "set", key: "denseEnabled", value: "false", scope: "project", runner });
-  runConfigWrite({ action: "unset", key: "denseEnabled", scope: "user", runner });
+  runConfigWrite({ schema, action: "set", key: "denseEnabled", value: "false", scope: "project", runner });
+  runConfigWrite({ schema, action: "unset", key: "denseEnabled", scope: "user", runner });
 
   assert.deepEqual(calls, [
     ["set", "denseEnabled", "false", "--scope", "project"],
@@ -64,25 +69,25 @@ test("TUI config writes delegate to the validated config command", () => {
 });
 
 test("boolean and enum drafts cycle through valid choices without typing", () => {
-  assert.equal(nextChoiceDraft("denseEnabled", "true", 1), "false");
-  assert.equal(nextChoiceDraft("denseEnabled", "false", -1), "true");
-  assert.equal(nextChoiceDraft("engine", "hybrid", 1), "keyword");
-  assert.equal(nextChoiceDraft("engine", "keyword", -1), "hybrid");
+  assert.equal(nextChoiceDraft("denseEnabled", "true", 1, { schema }), "false");
+  assert.equal(nextChoiceDraft("denseEnabled", "false", -1, { schema }), "true");
+  assert.equal(nextChoiceDraft("engine", "hybrid", 1, { schema }), "keyword");
+  assert.equal(nextChoiceDraft("engine", "keyword", -1, { schema }), "hybrid");
 });
 
 test("numeric drafts accept only their numeric format", () => {
-  assert.equal(appendConfigInput("k", "1", "2"), "12");
-  assert.equal(appendConfigInput("k", "1", "."), "1");
-  assert.equal(appendConfigInput("k", "1", "x"), "1");
+  assert.equal(appendConfigInput("k", "1", "2", { schema }), "12");
+  assert.equal(appendConfigInput("k", "1", ".", { schema }), "1");
+  assert.equal(appendConfigInput("k", "1", "x", { schema }), "1");
 
-  assert.equal(appendConfigInput("denseThreshold", "0", "."), "0.");
-  assert.equal(appendConfigInput("denseThreshold", "0.", "5"), "0.5");
-  assert.equal(appendConfigInput("denseThreshold", "0.5", "."), "0.5");
-  assert.equal(appendConfigInput("denseThreshold", "0.5", "x"), "0.5");
+  assert.equal(appendConfigInput("denseThreshold", "0", ".", { schema }), "0.");
+  assert.equal(appendConfigInput("denseThreshold", "0.", "5", { schema }), "0.5");
+  assert.equal(appendConfigInput("denseThreshold", "0.5", ".", { schema }), "0.5");
+  assert.equal(appendConfigInput("denseThreshold", "0.5", "x", { schema }), "0.5");
 });
 
 test("free-text drafts still accept path characters", () => {
-  assert.equal(appendConfigInput("graphPath", "graphs", "/custom.json"), "graphs/custom.json");
+  assert.equal(appendConfigInput("graphPath", "graphs", "/custom.json", { schema }), "graphs/custom.json");
 });
 test("interactive TUI exposes a settings tab and its key map", () => {
   const path = fileURLToPath(new URL("./tui.mjs", import.meta.url));
@@ -91,7 +96,7 @@ test("interactive TUI exposes a settings tab and its key map", () => {
   assert.match(source, /settings tab: g scope, e edit, u unset/);
 });
 test("every TUI setting explains its purpose and accepted value", () => {
-  const rows = collectConfigRows({ runner: fixtureRunner([]) });
+  const rows = collectConfigRows({ schema, runner: fixtureRunner([]) });
   assert.ok(rows.length > 0);
   assert.ok(rows.every((row) => typeof row.description === "string" && row.description.length > 10));
 

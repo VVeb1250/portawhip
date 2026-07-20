@@ -9,7 +9,7 @@ import { compileCapabilityGraph, writeCapabilityGraph } from "./capability-graph
 import { runRouterEval, runRouterEvalComparison, loadEvalSet } from "./router-eval.mjs";
 import { runLooEval } from "./loo-eval.mjs";
 import { runBlindEval } from "./blind-eval.mjs";
-import { loadRuntimeConfig } from "../state/config.mjs";
+import { loadRouterRuntimeConfig as loadRuntimeConfig } from "./router-config.mjs";
 import { computeFactors } from "./feedback.mjs";
 import { stackFactors, combineFactors } from "../state/stack-detect.mjs";
 import { harvestHardNegatives } from "./eval-harvest.mjs";

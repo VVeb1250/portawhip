@@ -1,7 +1,7 @@
 import { test, before } from "node:test";
 import assert from "node:assert/strict";
 import { buildIndex } from "../registry/registry.mjs";
-import { loadConfig } from "../state/config.mjs";
+import { loadRouterConfig as loadConfig } from "./router-config.mjs";
 import { routeHybrid } from "./hybrid-router.mjs";
 import { stackFactors } from "../state/stack-detect.mjs";
 

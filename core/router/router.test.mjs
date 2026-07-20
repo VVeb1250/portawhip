@@ -12,7 +12,7 @@ import {
 } from "./dense-embedder.mjs";
 import { compactRouteResult, explainRoute, runRoute } from "./route-entry.mjs";
 import { triggerCoverageEvidence } from "./intent-evidence.mjs";
-import { loadConfig } from "../state/config.mjs";
+import { loadRouterConfig as loadConfig } from "./router-config.mjs";
 import { CONNECTOR_TARGETS, targetsForHost } from "../surface/connector-targets.mjs";
 import { HOOK_TARGETS, hookTargetForHost } from "../surface/hook-targets.mjs";
 import { blockForVariant, upsertBlock } from "../../adapters/instructions/generate.mjs";

@@ -10,6 +10,7 @@ import { collectSyncConfig } from "./sync/sync-config.mjs";
 import { runReconcile } from "./sync/reconcile.mjs";
 import { LINK_SCOPES, linkActionNeedsConfirmation, linkCommandForInput, runLinkAction } from "./tui-actions.mjs";
 import { CONFIG_SCOPES, appendConfigInput, collectConfigRows, draftForRow, formatConfigValue, nextChoiceDraft, runConfigWrite, validateConfigDraft } from "./tui-config.mjs";
+import { resolveSchema } from "../core/state/config.mjs";
 import { selectionStyle } from "./tui-theme.mjs";
 
 const TABS = ["overview", "sync", "connectors", "hooks", "enrich", "capabilities", "settings"];
@@ -602,7 +603,9 @@ function Detail({ row, tab, width, height }) {
   );
 }
 
-function App() {
+// configSchema comes from the entry point below, not from an import: the
+// settings tab shows the keys of whatever capabilities are actually installed.
+function App({ configSchema }) {
   const { exit } = useApp();
   const { isRawModeSupported } = useStdin();
   const { columns, rows: terminalRows } = useTerminalSize();
@@ -626,7 +629,7 @@ function App() {
   const [linkResult, setLinkResult] = useState(null);
   const [armedLinkAction, setArmedLinkAction] = useState(null);
   const [showHelp, setShowHelp] = useState(false);
-  const [settingsRows, setSettingsRows] = useState(() => collectConfigRows());
+  const [settingsRows, setSettingsRows] = useState(() => collectConfigRows({ schema: configSchema }));
   const [configScopeIndex, setConfigScopeIndex] = useState(0);
   const [configEdit, setConfigEdit] = useState(null);
   const [armedConfigAction, setArmedConfigAction] = useState(null);
@@ -669,7 +672,7 @@ function App() {
           const direction = key.leftArrow ? -1 : 1;
           setConfigEdit((current) => ({
             ...current,
-            value: nextChoiceDraft(current.key, current.value, direction),
+            value: nextChoiceDraft(current.key, current.value, direction, { schema: configSchema }),
             armed: false,
           }));
           setMessage("");
@@ -677,19 +680,20 @@ function App() {
         }
         if (key.return) {
           try {
-            validateConfigDraft(configEdit.key, configEdit.value);
+            validateConfigDraft(configEdit.key, configEdit.value, { schema: configSchema });
             if (!configEdit.armed) {
               setConfigEdit((current) => ({ ...current, armed: true }));
               setMessage("config value valid; press enter again to save");
               return;
             }
             runConfigWrite({
+              schema: configSchema,
               action: "set",
               key: configEdit.key,
               value: configEdit.value,
               scope: configScope,
             });
-            setSettingsRows(collectConfigRows());
+            setSettingsRows(collectConfigRows({ schema: configSchema }));
             setMessage("saved " + configEdit.key + " (" + configScope + ")");
             setConfigEdit(null);
             setArmedConfigAction(null);
@@ -718,7 +722,7 @@ function App() {
           return;
         }
         if (input && !key.ctrl && !key.meta) {
-          const nextValue = appendConfigInput(configEdit.key, configEdit.value, input);
+          const nextValue = appendConfigInput(configEdit.key, configEdit.value, input, { schema: configSchema });
           if (nextValue === configEdit.value) {
             setMessage(
               configEdit.type === "boolean" || configEdit.type === "enum"
@@ -755,7 +759,7 @@ function App() {
         setArmedConfigAction(null);
         refresh();
         try {
-          setSettingsRows(collectConfigRows());
+          setSettingsRows(collectConfigRows({ schema: configSchema }));
         } catch (configError) {
           setMessage("config error: " + configError.message);
         }
@@ -880,8 +884,8 @@ function App() {
             return;
           }
           try {
-            const result = runConfigWrite({ action: "unset", key: row.key, scope: configScope });
-            setSettingsRows(collectConfigRows());
+            const result = runConfigWrite({ schema: configSchema, action: "unset", key: row.key, scope: configScope });
+            setSettingsRows(collectConfigRows({ schema: configSchema }));
             setMessage(result.removed ? "unset " + row.key + " (" + configScope + ")" : row.key + " has no " + configScope + " override");
           } catch (error) {
             setMessage("config error: " + error.message);
@@ -983,11 +987,15 @@ function App() {
 
 const cliArgs = new Set(process.argv.slice(2));
 
+// Resolved once, here, and passed down. Which settings the TUI can show depends
+// on which capability providers are installed, and discovery is async.
+const configSchema = await resolveSchema();
+
 if (cliArgs.has("--help") || cliArgs.has("-h")) {
   printHelp();
 } else if (!process.stdin.isTTY || !process.stdout.isTTY || cliArgs.has("--summary")) {
   const inventory = await collectSurfaceInventory();
-  const settings = collectConfigRows();
+  const settings = collectConfigRows({ schema: configSchema });
   const attention = [
     ...(inventory.summary.connectors.missing ? [`connectors missing=${inventory.summary.connectors.missing}`] : []),
     ...(inventory.summary.connectors["mcp-only"] ? [`connectors mcp-only=${inventory.summary.connectors["mcp-only"]}`] : []),
@@ -1010,6 +1018,6 @@ if (cliArgs.has("--help") || cliArgs.has("-h")) {
   );
 } else {
   enterFullscreen();
-  const instance = render(React.createElement(App));
+  const instance = render(React.createElement(App, { configSchema }));
   instance.waitUntilExit().finally(exitFullscreen);
 }

@@ -5,13 +5,18 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import * as yaml from "js-yaml";
 
+import { resolveSchema } from "../core/state/config.mjs";
 import { runConfigCommand } from "./config.mjs";
+
+// The CLI's key space is whatever is installed, so these exercise the same
+// resolution path the real `portawhip config` command uses.
+const schema = await resolveSchema();
 
 test("config command sets, reads, and unsets validated user values", () => {
   const root = mkdtempSync(join(tmpdir(), "portawhip-config-cli-"));
   const home = join(root, "home");
   const cwd = join(root, "project");
-  const context = { home, cwd, env: {}, platform: "linux" };
+  const context = { home, cwd, env: {}, platform: "linux", schema };
   try {
     const setResult = runConfigCommand(["set", "denseEnabled", "false"], context);
     assert.equal(setResult.value, false);
@@ -31,7 +36,7 @@ test("config command sets, reads, and unsets validated user values", () => {
 
 test("config command supports nested project settings", () => {
   const root = mkdtempSync(join(tmpdir(), "portawhip-config-project-"));
-  const context = { home: join(root, "home"), cwd: join(root, "project"), env: {}, platform: "linux" };
+  const context = { home: join(root, "home"), cwd: join(root, "project"), env: {}, platform: "linux", schema };
   try {
     const result = runConfigCommand(
       ["set", "autoSync.throttleMinutes", "15", "--scope", "project"],
@@ -48,7 +53,7 @@ test("config command supports nested project settings", () => {
 });
 
 test("config command rejects unknown keys and invalid values", () => {
-  const context = { home: "/tmp/home", cwd: "/tmp/project", env: {}, platform: "linux" };
+  const context = { home: "/tmp/home", cwd: "/tmp/project", env: {}, platform: "linux", schema };
   assert.throws(() => runConfigCommand(["set", "unknown", "x"], context), /unknown config key/i);
   assert.throws(() => runConfigCommand(["set", "k", "zero"], context), /must be a number/i);
   assert.throws(() => runConfigCommand(["set", "denseThreshold", "2"], context), /between 0 and 1/i);
