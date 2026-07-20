@@ -8,7 +8,6 @@ import { buildIndex, readRawEntries } from "./registry.mjs";
 import { discoverCli } from "./discover.mjs";
 import { mergeEnrichmentRecords } from "./enrich.mjs";
 import { normalizeTriggerSpec } from "./trigger-spec.mjs";
-import { route } from "../router/scorer.mjs";
 
 const RECIPE_PATHS = [
   "recipe.yaml",
@@ -113,7 +112,11 @@ test("trigger specs: skipWhen survives enrichment-cache discovery", () => {
   }
 });
 
-test("trigger specs: skipWhen parses, survives indexing, and never filters retrieval", async () => {
+// The other half of this — that skipWhen reaches a caller through retrieval and
+// never filters it — is asserted in core/router/skip-when.test.mjs. It lives
+// there because it is a routing claim, and the registry must not import the
+// router (see core/router/leaf-invariant.mjs).
+test("trigger specs: skipWhen parses and survives indexing", async () => {
   const root = mkdtempSync(join(tmpdir(), "portawhip-trigger-spec-"));
   const recipe = join(root, "recipe.yaml");
   writeFileSync(
@@ -133,14 +136,6 @@ test("trigger specs: skipWhen parses, survives indexing, and never filters retri
   try {
     const index = await buildIndex(recipe, { discover: false });
     assert.deepEqual(index.entries[0].route.skipWhen, ["plain text search", "non-code documents"]);
-
-    const results = route(index, "plain text search", {
-      threshold: 1,
-      recipeThreshold: 1,
-      k: 5,
-    });
-    assert.deepEqual(results.map((item) => item.id), ["codegraph"]);
-    assert.deepEqual(results[0].skipWhen, ["plain text search", "non-code documents"]);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

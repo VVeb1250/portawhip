@@ -61,7 +61,7 @@
   type: mcp
   source: node
   path: "."
-  args: ["server/mcp-server.mjs"]
+  args: ["core/router/server/mcp-server.mjs"]
   name: harness-router
   scope: project
   route:

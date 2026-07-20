@@ -9,14 +9,16 @@ test("npm package exposes public npx and MCP entry points", () => {
   assert.equal(packageJson.publishConfig?.access, "public");
   assert.equal(packageJson.bin?.portawhip, "scripts/portawhip.mjs");
   assert.equal(packageJson.bin?.["portawhip-router"], "core/router/router-cli.mjs");
-  assert.equal(packageJson.bin?.["harness-router"], "server/mcp-server.mjs");
+  assert.equal(packageJson.bin?.["harness-router"], "core/router/server/mcp-server.mjs");
 });
 
 test("npm package declares a supported runtime and a release-safe file allowlist", () => {
   assert.match(packageJson.engines?.node ?? "", />=20/);
   assert.ok(packageJson.files?.includes("core/"));
   assert.ok(packageJson.files?.includes("scripts/"));
-  assert.ok(packageJson.files?.includes("server/"));
+  // The MCP server ships under core/router/server/, so "core/" already covers
+  // it; a stale "server/" entry here would be a silently dead allowlist line.
+  assert.ok(!packageJson.files?.includes("server/"));
   assert.ok(packageJson.files?.includes("recipe.yaml"));
   assert.ok(!packageJson.files?.some((entry) => entry.startsWith(".hp-state")));
 });

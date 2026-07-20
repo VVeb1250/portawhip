@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 
-import { assertRouteContract } from "../core/router/route-contract.mjs";
+import { assertRouteContract } from "../route-contract.mjs";
 
 // Live integration test - spawns the REAL MCP server and calls route() over
 // real stdio JSON-RPC, no mocks. The unit tests in core/router.test.mjs inject
@@ -15,8 +15,9 @@ import { assertRouteContract } from "../core/router/route-contract.mjs";
 // ~73s, past the MCP client timeout, leaving route() uncallable for a whole
 // session (found live 2026-07-07). A mock can't catch that; only spawning the
 // real server with dense enabled (the default) and timing a real call can.
-const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
-const SERVER = join(ROOT, "server", "mcp-server.mjs");
+const HERE = dirname(fileURLToPath(import.meta.url));
+const ROOT = dirname(dirname(dirname(HERE)));
+const SERVER = join(HERE, "mcp-server.mjs");
 const TEST_FEEDBACK_ROOT = mkdtempSync(join(tmpdir(), "portawhip-mcp-feedback-"));
 const FEEDBACK_PATH = join(TEST_FEEDBACK_ROOT, ".hp-state", "feedback", "events.jsonl");
 

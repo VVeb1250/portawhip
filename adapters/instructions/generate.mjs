@@ -1,80 +1,67 @@
 #!/usr/bin/env node
-// Phase 2 step 3: idempotent insert/remove of a one-liner instruction block
-// into a host's instruction file (CLAUDE.md / AGENTS.md / GEMINI.md), so the
-// model knows to call the harness-router MCP server before starting a task.
-// Marker comments make this reversible — never touches the rest of the file.
+// Idempotent insert/remove of an instruction block into a host's instruction
+// file (CLAUDE.md / AGENTS.md / GEMINI.md / rule files), so a host's model is
+// told about something before it starts a task. Marker comments make this
+// reversible — it never touches the rest of the file.
+//
+// This module owns the mechanism only. What the block SAYS comes from a
+// connector descriptor supplied by the caller:
+//
+//   {
+//     id:       marker id, e.g. "harness-router" -> <!-- harness-router:start -->
+//     body:     the instruction text
+//     bodyFor:  optional (host) => text, when one host needs different wording
+//     summary:  one line, used as the description in rule-file frontmatter
+//   }
+//
+// Keeping the text out of here is what lets a capability ship its own connector
+// wording and take it away again when uninstalled.
 
 import { readFileSync, writeFileSync, existsSync } from "node:fs";
 
-const START = "<!-- harness-router:start -->";
-const END = "<!-- harness-router:end -->";
-
-// Plain wording — safe default for hosts with no lazy tool-loading concept
-// (Codex/AGENTS.md verified 8/8 route() calls with this text alone).
-export const GENERIC_BLOCK = `${START}
-Before starting a task, call \`route(task summary)\` on the harness-router MCP
-server and follow any returned pointers. Pass only the positively requested action
-and its direct object; do not copy the raw prompt. Drop chit-chat, venting,
-background, and any rejected, negated, or hypothetical option. If a request is
-buried in chat, route only the request; if the message names several distinct
-actions, call route once per action.
-Example: "ugh CI is flaky again, anyway find where we parse the auth token" ->
-route("find the code that parses the auth token").
-An empty result is normal and means nothing relevant is installed — proceed without it.
-${END}`;
-
-// Claude Code defers MCP tool schemas behind ToolSearch until looked up by
-// name — confirmed live: harness-router's route/list_all showed as deferred
-// at session start and were never called (0/8 in Phase 2 verify), because
-// the generic wording never told the model to look them up first.
-export const CLAUDE_CODE_BLOCK = `${START}
-Before starting a task, call \`route(task summary)\` on the harness-router MCP
-server and follow any returned pointers. Pass only the positively requested action
-and its direct object; do not copy the raw prompt. Drop chit-chat, venting,
-background, and any rejected, negated, or hypothetical option. If a request is
-buried in chat, route only the request; if the message names several distinct
-actions, call route once per action.
-Example: "ugh CI is flaky again, anyway find where we parse the auth token" ->
-route("find the code that parses the auth token").
-If \`route\`/\`list_all\` show up as deferred/pending tools rather than directly
-callable, first call ToolSearch with query
-"select:mcp__harness-router__route,mcp__harness-router__list_all" to load them,
-then call route(). An empty result from route() is normal and means nothing
-relevant is installed — proceed without it.
-${END}`;
-
-export const CURSOR_RULE_BLOCK = `---
-description: Route tasks through the project harness-router before starting work
-alwaysApply: true
----
-
-${GENERIC_BLOCK}`;
-
-// Windsurf workspace rules live under .windsurf/rules/*.md and pick an
-// activation mode via the `trigger` frontmatter field; always_on = injected
-// into every request in the workspace. This is a dedicated harness-owned
-// file (see owned:true in connector-targets), so it is written whole, not
-// marker-upserted — the frontmatter must stay the first bytes of the file.
-export const WINDSURF_RULE_BLOCK = `---
-trigger: always_on
----
-
-${GENERIC_BLOCK}`;
-
-export function blockForVariant(variant = "generic") {
-  if (variant === "claude-code") return CLAUDE_CODE_BLOCK;
-  if (variant === "cursor-rule") return CURSOR_RULE_BLOCK;
-  if (variant === "windsurf-rule") return WINDSURF_RULE_BLOCK;
-  return GENERIC_BLOCK;
+export function markersFor(id) {
+  return { start: `<!-- ${id}:start -->`, end: `<!-- ${id}:end -->` };
 }
 
-export function upsertBlock(targetPath, block = GENERIC_BLOCK) {
+export function wrapBlock(connector, host = null) {
+  const { start, end } = markersFor(connector.id);
+  const body = (host && connector.bodyFor?.(host)) || connector.body;
+  return `${start}\n${body.trim()}\n${end}`;
+}
+
+export function hasBlock(targetPath, id) {
+  if (!existsSync(targetPath)) return false;
+  const content = readFileSync(targetPath, "utf8");
+  const { start, end } = markersFor(id);
+  return content.includes(start) && content.includes(end);
+}
+
+// A dedicated, harness-owned rule file carries frontmatter BEFORE the marker
+// block. Cursor uses `description` + `alwaysApply`; Windsurf uses `trigger`.
+function withFrontmatter(frontmatter, block) {
+  return `---\n${frontmatter}\n---\n\n${block}`;
+}
+
+export function blockForVariant(variant = "generic", connector) {
+  if (!connector) throw new Error("blockForVariant requires a connector descriptor");
+  if (variant === "claude-code") return wrapBlock(connector, "claude-code");
+  const generic = wrapBlock(connector);
+  if (variant === "cursor-rule") {
+    return withFrontmatter(`description: ${connector.summary}\nalwaysApply: true`, generic);
+  }
+  if (variant === "windsurf-rule") return withFrontmatter("trigger: always_on", generic);
+  return generic;
+}
+
+export function upsertBlock(targetPath, block, { id } = {}) {
+  const markerId = id ?? idFromBlock(block);
+  const { start, end } = markersFor(markerId);
   const before = existsSync(targetPath) ? readFileSync(targetPath, "utf8") : "";
-  const startIdx = before.indexOf(START);
-  const endIdx = before.indexOf(END);
+  const startIdx = before.indexOf(start);
+  const endIdx = before.indexOf(end);
   const after =
     startIdx !== -1 && endIdx !== -1
-      ? before.slice(0, startIdx) + block + before.slice(endIdx + END.length)
+      ? before.slice(0, startIdx) + block + before.slice(endIdx + end.length)
       : before.length > 0
         ? `${before.trimEnd()}\n\n${block}\n`
         : `${block}\n`;
@@ -82,30 +69,54 @@ export function upsertBlock(targetPath, block = GENERIC_BLOCK) {
   return after !== before;
 }
 
-export function removeBlock(targetPath) {
+export function removeBlock(targetPath, { id } = {}) {
   if (!existsSync(targetPath)) return false;
   const content = readFileSync(targetPath, "utf8");
-  const startIdx = content.indexOf(START);
-  const endIdx = content.indexOf(END);
+  const markerId = id ?? idFromContent(content);
+  if (!markerId) return false;
+  const { start, end } = markersFor(markerId);
+  const startIdx = content.indexOf(start);
+  const endIdx = content.indexOf(end);
   if (startIdx === -1 || endIdx === -1) return false;
   const before = content.slice(0, startIdx).replace(/\n+$/, "\n");
-  const after = content.slice(endIdx + END.length).replace(/^\n+/, "");
+  const after = content.slice(endIdx + end.length).replace(/^\n+/, "");
   writeFileSync(targetPath, `${before}${after}`);
   return true;
 }
 
-function main() {
+// Callers that already hold a rendered block (or an existing file) do not need
+// to pass the id twice — it is recoverable from the marker itself.
+function idFromBlock(block) {
+  return /<!--\s*([\w.-]+):start\s*-->/.exec(block)?.[1] ?? null;
+}
+
+function idFromContent(content) {
+  return idFromBlock(content);
+}
+
+async function main() {
   const [, , command, targetPath, variant] = process.argv;
   if (!targetPath || !["install", "remove"].includes(command)) {
     console.error(
-      "usage: generate.mjs <install|remove> <path-to-CLAUDE.md-or-similar> [claude-code|generic]",
+      "usage: generate.mjs <install|remove> <path-to-CLAUDE.md-or-similar> [claude-code|generic|cursor-rule|windsurf-rule]",
     );
     process.exitCode = 1;
     return;
   }
-  const block = blockForVariant(variant);
-  const changed = command === "install" ? upsertBlock(targetPath, block) : removeBlock(targetPath);
-  console.log(`${command} ${targetPath}: ${changed ? "changed" : "no-op"}`);
+  const { connectorsFromProviders } = await import("../../core/state/connectors.mjs");
+  const connectors = await connectorsFromProviders();
+  if (connectors.length === 0) {
+    console.error("no capability provider supplies an instruction connector; nothing to write");
+    process.exitCode = 1;
+    return;
+  }
+  for (const connector of connectors) {
+    const changed =
+      command === "install"
+        ? upsertBlock(targetPath, blockForVariant(variant, connector), { id: connector.id })
+        : removeBlock(targetPath, { id: connector.id });
+    console.log(`${command} ${connector.id} -> ${targetPath}: ${changed ? "changed" : "no-op"}`);
+  }
 }
 
 import { pathToFileURL } from "node:url";

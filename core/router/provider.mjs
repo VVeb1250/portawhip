@@ -20,8 +20,10 @@ import { emissionState, REUSE_NOTE } from "./session-ledger.mjs";
 import { computeFactors, logEvent, readEvents } from "./feedback.mjs";
 import { stackFactors, combineFactors } from "../state/stack-detect.mjs";
 import { loadRouterRuntimeConfig, ROUTER_SCHEMA } from "./router-config.mjs";
+import { ROUTER_CONNECTOR } from "./connector.mjs";
 
 export const configSchema = ROUTER_SCHEMA;
+export const connector = ROUTER_CONNECTOR;
 
 const MIN_PROMPT_LEN = 8;
 

@@ -16,6 +16,7 @@ import { loadRouterConfig as loadConfig } from "./router-config.mjs";
 import { CONNECTOR_TARGETS, targetsForHost } from "../surface/connector-targets.mjs";
 import { HOOK_TARGETS, hookTargetForHost } from "../surface/hook-targets.mjs";
 import { blockForVariant, upsertBlock } from "../../adapters/instructions/generate.mjs";
+import { ROUTER_CONNECTOR } from "./connector.mjs";
 import { runRouterEval } from "./router-eval.mjs";
 import { installEntries } from "../../scripts/load.mjs";
 import { discoverAgents, discoverCommands, discoverSkillsFromDirs } from "../registry/discover.mjs";
@@ -895,7 +896,7 @@ test("connectors: every instruction target has a renderable harness block", () =
   for (const [hostId, config] of Object.entries(CONNECTOR_TARGETS)) {
     assert.ok(config.instructionTargets.length > 0, `${hostId} has no instruction targets`);
     for (const target of config.instructionTargets) {
-      const block = blockForVariant(target.variant);
+      const block = blockForVariant(target.variant, ROUTER_CONNECTOR);
       assert.match(block, /harness-router:start/);
       assert.match(block, /route\(task summary\)/);
       assert.match(block, /requested action/i, `${hostId} route instruction must ask for a reasoned action summary`);
@@ -912,11 +913,11 @@ test("connectors: relinking replaces an old route block and remains idempotent",
       path,
       "<!-- harness-router:start -->\nBefore starting, call route(task summary).\n<!-- harness-router:end -->\n",
     );
-    assert.equal(upsertBlock(path, blockForVariant("generic")), true);
+    assert.equal(upsertBlock(path, blockForVariant("generic", ROUTER_CONNECTOR)), true);
     const upgraded = readFileSync(path, "utf8");
     assert.match(upgraded, /positively requested action/i);
     assert.equal((upgraded.match(/harness-router:start/g) ?? []).length, 1);
-    assert.equal(upsertBlock(path, blockForVariant("generic")), false);
+    assert.equal(upsertBlock(path, blockForVariant("generic", ROUTER_CONNECTOR)), false);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

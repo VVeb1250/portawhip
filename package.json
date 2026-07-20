@@ -30,7 +30,7 @@
   "bin": {
     "portawhip": "scripts/portawhip.mjs",
     "portawhip-router": "core/router/router-cli.mjs",
-    "harness-router": "server/mcp-server.mjs"
+    "harness-router": "core/router/server/mcp-server.mjs"
   },
   "files": [
     "adapters/",
@@ -42,7 +42,6 @@
     ".rulesync/",
     "rulesync.jsonc",
     "scripts/",
-    "server/",
     "hooks.manifest.yaml",
     "recipe.yaml",
     "router.config.yaml",

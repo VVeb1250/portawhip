@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { shouldRun, lockIsStale, runAutoSync } from "./auto-sync.mjs";
-import { loadRouterConfig as loadConfig } from "../../core/router/router-config.mjs";
+import { loadConfig } from "../../core/state/config.mjs";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";

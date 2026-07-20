@@ -4,26 +4,27 @@
 // call directly — no per-host code beyond this one stdio process.
 
 import { fileURLToPath } from "node:url";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
-import { loadIndex } from "../core/registry/registry.mjs";
-import { listAll } from "../core/router/scorer.mjs";
-import { compactRouteResult, explainRoute } from "../core/router/route-entry.mjs";
-import { createSessionLedger, logPullEmissions } from "../core/router/session-ledger.mjs";
-import { loadRouterRuntimeConfig as loadRuntimeConfig } from "../core/router/router-config.mjs";
-import { computeFactors, logEvent } from "../core/router/feedback.mjs";
-import { stackFactors, combineFactors } from "../core/state/stack-detect.mjs";
-import { readActiveSelection, resolveRecipePaths } from "../core/state/bundle-state.mjs";
-import { warmDense, setDenseCachePath, primeDocCache } from "../core/router/dense-embedder.mjs";
-import { buildCapabilityDocs } from "../core/registry/capability-docs.mjs";
+import { loadIndex } from "../../registry/registry.mjs";
+import { listAll } from "../scorer.mjs";
+import { compactRouteResult, explainRoute } from "../route-entry.mjs";
+import { createSessionLedger, logPullEmissions } from "../session-ledger.mjs";
+import { loadRouterRuntimeConfig as loadRuntimeConfig } from "../router-config.mjs";
+import { computeFactors, logEvent } from "../feedback.mjs";
+import { stackFactors, combineFactors } from "../../state/stack-detect.mjs";
+import { readActiveSelection, resolveRecipePaths } from "../../state/bundle-state.mjs";
+import { warmDense, setDenseCachePath, primeDocCache } from "../dense-embedder.mjs";
+import { buildCapabilityDocs } from "../../registry/capability-docs.mjs";
 
 // This server is registered globally (add-mcp may promote project scope to
 // global depending on the host), so a caller can invoke it from ANY cwd —
 // recipe.yaml/router.config.yaml must resolve to this repo, never the
 // caller's working directory.
-const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
+// core/router/server/mcp-server.mjs -> three levels up is the repo root.
+const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
 // Integration tests and embedded deployments may isolate outcome state from
 // the repository's live dogfood log. Capability/config discovery still uses
 // ROOT; only feedback events are redirected.
