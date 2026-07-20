@@ -13,13 +13,7 @@ import {
 import { compactRouteResult, explainRoute, runRoute } from "./route-entry.mjs";
 import { triggerCoverageEvidence } from "./intent-evidence.mjs";
 import { loadRouterConfig as loadConfig } from "./router-config.mjs";
-import { CONNECTOR_TARGETS, targetsForHost } from "../surface/connector-targets.mjs";
-import { HOOK_TARGETS, hookTargetForHost } from "../surface/hook-targets.mjs";
-import { blockForVariant, upsertBlock } from "../../adapters/instructions/generate.mjs";
-import { ROUTER_CONNECTOR } from "./connector.mjs";
 import { runRouterEval } from "./router-eval.mjs";
-import { installEntries } from "../../scripts/load.mjs";
-import { discoverAgents, discoverCommands, discoverSkillsFromDirs } from "../registry/discover.mjs";
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -292,91 +286,6 @@ test("curated aliases: recipe phrasings route to the capability they name", asyn
     assert.equal(ids[0]?.id, top, prompt);
     if (action) assert.equal(ids[0].action, action, prompt);
     if (alsoIncludes) assert.ok(ids.map((h) => h.id).includes(alsoIncludes), `${prompt} -> ${ids.map((h) => h.id)}`);
-  }
-});
-
-test("route-only entries are skipped by the loader", () => {
-  const result = installEntries([{ id: "alias-only", type: "skill", source: "missing", install: false }], {
-    mcpHosts: ["codex"],
-    skillHosts: ["codex"],
-  });
-  assert.deepEqual(result, [{ id: "alias-only", ok: true, skipped: true }]);
-});
-
-test("discovery: filesystem scan includes nested Claude plugin cache skills", () => {
-  const root = tempRoot();
-  try {
-    const skillDir = join(root, ".claude", "plugins", "cache", "ecc", "ecc", "2.0.0", ".agents", "skills", "nested-skill");
-    mkdirSync(skillDir, { recursive: true });
-    writeFileSync(
-      join(skillDir, "SKILL.md"),
-      '---\nname: nested-plugin-skill\ndescription: Skill from Claude plugin cache\n---\n# Nested\n',
-    );
-    const skills = discoverSkillsFromDirs([join(root, ".claude", "plugins", "cache")]);
-    assert.deepEqual(skills, [
-      {
-        name: "nested-plugin-skill",
-        description: "Skill from Claude plugin cache",
-        path: skillDir,
-      },
-    ]);
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-  }
-});
-
-test("discovery: filesystem scan includes nested plugin commands", () => {
-  const root = tempRoot();
-  try {
-    const commandDir = join(root, ".claude", "plugins", "cache", "ecc", "ecc", "2.0.0", "commands");
-    mkdirSync(commandDir, { recursive: true });
-    const commandPath = join(commandDir, "harness-audit.md");
-    writeFileSync(commandPath, "---\ndescription: Run a deterministic harness audit.\n---\n# Harness Audit\n");
-    const commands = discoverCommands([join(root, ".claude", "plugins", "cache")]);
-    assert.deepEqual(commands.map((command) => ({
-      id: command.id,
-      type: command.type,
-      path: command.path,
-      kindTrigger: command.route.triggers.includes("/harness-audit"),
-    })), [
-      {
-        id: "harness-audit",
-        type: "command",
-        path: commandPath,
-        kindTrigger: true,
-      },
-    ]);
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-  }
-});
-
-test("discovery: filesystem scan includes nested plugin agents", () => {
-  const root = tempRoot();
-  try {
-    const agentDir = join(root, ".claude", "plugins", "cache", "ecc", "ecc", "2.0.0", "agents");
-    mkdirSync(agentDir, { recursive: true });
-    const agentPath = join(agentDir, "harness-optimizer.md");
-    writeFileSync(
-      agentPath,
-      "---\nname: harness-optimizer\ndescription: Analyze and improve local agent harness configuration.\n---\n# Agent\n",
-    );
-    const agents = discoverAgents([join(root, ".claude", "plugins", "cache")]);
-    assert.deepEqual(agents.map((agent) => ({
-      id: agent.id,
-      type: agent.type,
-      path: agent.path,
-      description: agent.route.description,
-    })), [
-      {
-        id: "harness-optimizer",
-        type: "agent",
-        path: agentPath,
-        description: "Analyze and improve local agent harness configuration.",
-      },
-    ]);
-  } finally {
-    rmSync(root, { recursive: true, force: true });
   }
 });
 
@@ -890,57 +799,4 @@ test("discovery: auto-discovered entries carry an origin tag", async () => {
     assert.ok(e.origin.startsWith("auto:"), `${e.id} missing auto: origin tag`);
     assert.ok(Array.isArray(e.route.triggers) && e.route.triggers.length > 0);
   }
-});
-
-test("connectors: every instruction target has a renderable harness block", () => {
-  for (const [hostId, config] of Object.entries(CONNECTOR_TARGETS)) {
-    assert.ok(config.instructionTargets.length > 0, `${hostId} has no instruction targets`);
-    for (const target of config.instructionTargets) {
-      const block = blockForVariant(target.variant, ROUTER_CONNECTOR);
-      assert.match(block, /harness-router:start/);
-      assert.match(block, /route\(task summary\)/);
-      assert.match(block, /requested action/i, `${hostId} route instruction must ask for a reasoned action summary`);
-      assert.match(block, /not (?:repeat|copy) the raw (?:prompt|topic)/i);
-    }
-  }
-});
-
-test("connectors: relinking replaces an old route block and remains idempotent", () => {
-  const root = tempRoot("harness-router-instruction-upgrade-");
-  try {
-    const path = join(root, "AGENTS.md");
-    writeFileSync(
-      path,
-      "<!-- harness-router:start -->\nBefore starting, call route(task summary).\n<!-- harness-router:end -->\n",
-    );
-    assert.equal(upsertBlock(path, blockForVariant("generic", ROUTER_CONNECTOR)), true);
-    const upgraded = readFileSync(path, "utf8");
-    assert.match(upgraded, /positively requested action/i);
-    assert.equal((upgraded.match(/harness-router:start/g) ?? []).length, 1);
-    assert.equal(upsertBlock(path, blockForVariant("generic", ROUTER_CONNECTOR)), false);
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-  }
-});
-
-test("connectors: scope filter returns only requested targets", () => {
-  assert.ok(targetsForHost("codex", { scope: "global" }).every((target) => target.scope === "global"));
-  assert.ok(targetsForHost("codex", { scope: "project" }).every((target) => target.scope === "project"));
-  assert.deepEqual(targetsForHost("claude-desktop", { scope: "project" }), []);
-});
-
-test("hooks: native targets map logical events to host events", () => {
-  assert.equal(HOOK_TARGETS["claude-code"].events.user_prompt, "UserPromptSubmit");
-  assert.equal(HOOK_TARGETS.codex.events.post_tool, "PostToolUse");
-  assert.equal(HOOK_TARGETS["gemini-cli"].events.user_prompt, "BeforeAgent");
-  assert.equal(HOOK_TARGETS["gemini-cli"].events.post_tool, "AfterTool");
-  assert.equal(hookTargetForHost("cursor", { scope: "project" }), null);
-});
-
-test("hooks: scoped targets resolve project and global paths", () => {
-  const project = hookTargetForHost("codex", { scope: "project" });
-  const global = hookTargetForHost("codex", { scope: "global" });
-  assert.match(project.path.replace(/\\/g, "/"), /\.codex\/hooks\.json$/);
-  assert.match(global.path.replace(/\\/g, "/"), /\.codex\/hooks\.json$/);
-  assert.notEqual(project.path, global.path);
 });

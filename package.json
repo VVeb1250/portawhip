@@ -32,6 +32,16 @@
     "portawhip-router": "core/router/router-cli.mjs",
     "harness-router": "core/router/server/mcp-server.mjs"
   },
+  "exports": {
+    "./registry": "./core/registry/registry.mjs",
+    "./registry/docs": "./core/registry/capability-docs.mjs",
+    "./registry/kind": "./core/registry/capability-kind.mjs",
+    "./registry/enrich": "./core/registry/enrich.mjs",
+    "./state/config": "./core/state/config.mjs",
+    "./state/stack-detect": "./core/state/stack-detect.mjs",
+    "./state/bundle-state": "./core/state/bundle-state.mjs",
+    "./package.json": "./package.json"
+  },
   "files": [
     "adapters/",
     "core/",
