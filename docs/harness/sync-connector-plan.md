@@ -3,7 +3,8 @@
 > Status: **DONE — phases S0–S4 shipped 2026-07-10** (per-phase logs
 > `docs/archive/phaseS0-verify.md` … `phaseS4-verify.md`; `HANDOFF.md` holds
 > the living summary). Successor execution phase after the router phases
-> (PLAN.md Phase 0–4, done); anchor is VISION.md §1 half #1. This plan closed
+> (the router's Phase 0–4, done — now in the portawhip-router repo under
+> docs/archive/); anchor is VISION.md §1. This plan closed
 > the gap between that vision and the former install/push-only reality.
 > **Superseded on the mechanism:** this plan's canonical store + fan-out used
 > `.agents/` + `@agents-dev/cli`; the later writer-consolidation refactor
@@ -275,5 +276,5 @@ delegated, or documented won't-do.
   valid result everywhere.
 - Router work is frozen during S0–S2 except bug fixes — trust-loop data
   needs 1–2 weeks of clean signal anyway (memory: router-trust-loop-hygiene).
-- PLAN.md gets a pointer to this file when execution starts; VISION.md §6
+- VISION.md §6
   gains a "Phase S" entry per completed phase.

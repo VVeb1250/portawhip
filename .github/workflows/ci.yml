@@ -36,7 +36,13 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - run: npm run route:eval
+      # portawhip must work with no capability provider installed. CI has none
+      # installed anyway, so `npm test` above already covers the bare case —
+      # this run pins it explicitly so the guarantee does not depend on CI
+      # happening to be bare. The gap this does NOT close is the linked case:
+      # nothing here proves portawhip still works WITH a provider. That needs
+      # the router published or linked, and is verified locally for now.
+      - run: PORTAWHIP_DISABLE_PROVIDERS=all npm test
       - run: npm run sync-config -- --backend agent-skill-manager
       - run: npm run tui -- --summary
       - run: npm audit --audit-level=high

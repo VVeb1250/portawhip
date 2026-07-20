@@ -2,10 +2,10 @@
 
 > This is the "why" and "destination" doc — it changes only when direction
 > changes. `HANDOFF.md` owns the living current state. The execution roadmaps
-> (`PLAN.md` for the router, `docs/sync-connector-plan.md` for surface sync,
-> `docs/writer-consolidation-plan.md` for the single-writer refactor) are all
-> complete; read them for the reasoning, not the current status. If they ever
-> conflict, re-derive the roadmaps from this file — this one is the anchor.
+> (`docs/harness/sync-connector-plan.md` for surface sync,
+> `docs/harness/writer-consolidation-plan.md` for the single-writer refactor)
+> are complete; read them for the reasoning, not the current status. If they
+> ever conflict, re-derive the roadmaps from this file — this one is the anchor.
 
 ## 0. Where this came from
 
@@ -36,29 +36,41 @@ duplicates things that already exist elsewhere.
 
 ## 1. One-sentence destination
 
-**A thin, dynamic control-plane that loads, syncs, and surfaces capabilities
-across whatever AI-agent hosts + OS the user actually has — importing what's
-installed in any one host and fanning it out to all of them (MCP, CLI,
+**A thin, dynamic control-plane that collects the capabilities a user's AI
+agents already have, across whatever hosts and OS they actually run — importing
+what is installed in any one host and fanning it out to all of them (MCP, CLI,
 skills, commands, agents, instructions, hooks), by delegating to the best
-existing tool per surface — and, separately, a router that surfaces the
-*right* capability at the *right* moment instead of dumping everything into
-context.**
+existing tool per surface.**
 
-Two halves, both now built:
+That is one job, not two. **Collect once, plug in anywhere.** Declare a
+capability once in `recipe.yaml`/`.rulesync/` and fan it out, *and* import what
+is already installed in any detected host → a canonical store → back out to
+every other host, across seven surfaces (instructions, MCP, skills, commands,
+agents, native hooks; embedded hooks inventory-only — a trust boundary). No
+install/sync engine of our own; delegated to add-mcp / mise / asm / **rulesync**
+(the sole fan-out writer, both project and global scope).
 
-1. **Loader + cross-host surface sync** (Step 1 done; bidirectional sync
-   S0–S4 done; single-writer consolidation done): "load however, use
-   anywhere" — now in both directions. Declare a capability once in
-   `recipe.yaml`/`.rulesync/` and fan it out, *and* import what's already
-   installed in any detected host → a canonical store → back out to every
-   other host, across seven surfaces (instructions, MCP, skills, commands,
-   agents, native hooks; embedded hooks inventory-only — a trust boundary).
-   No install/sync engine of our own; delegated to add-mcp / mise / asm /
-   **rulesync** (the sole fan-out writer, both project and global scope).
-2. **Router** (Phase 0–4 done; intelligence overhaul 2026-07-09/11):
-   "surface the right thing at the right time." Hybrid sparse+dense
-   retrieval, calibrated-confidence abstain, push/pull-asymmetric delivery.
-   No routing logic reinvented where a host already does it natively.
+### What is not in this repo, and why
+
+Deciding *which* capability to surface for a given task — retrieval, ranking,
+abstain — was the second half of this project until 2026-07-21. It now ships
+separately as **`portawhip-router`**.
+
+The split was not a change of ambition; it was an admission about maturity. The
+collection half works and is worth installing. The routing half is live research
+whose own held-out eval puts top-1 at 27.5%, and it drags a 500MB embedding
+model behind it. Keeping the two in one package meant every user paid for the
+unfinished half, and every measurement of the finished half was entangled with
+it.
+
+What replaced it is a **provider seam**: an optional package can contribute
+config keys, an instruction connector, hook behaviour, and its own recipe
+entries, all resolved at runtime. portawhip never imports a provider, and a
+provider that is not installed is an absence rather than an error. The router is
+the first consumer of that seam; it should not be the last.
+
+This is the "delegate, don't rebuild" principle applied to ourselves: if a
+capability is not ours to own, it should not be in our package.
 
 ## 2. Non-negotiable principles (the anti-repeat-v1 rules)
 
@@ -104,7 +116,7 @@ orchestration):
 | Native hooks key | **`scripts/link/link-hooks.mjs`** (ours) | rulesync's `hooks` feature is non-functional for claudecode (live-tested); link-hooks is a surgical writer on that one disjoint region of a file rulesync otherwise owns — the coexistence rule (surgical writers may share; total-ownership writers may not) |
 | Host detection | **add-mcp** primary + `core/surface/extra-hosts.mjs` supplement | add-mcp catalogues mainstream hosts; a presence-checked probe covers newer ones it hasn't (Pi, Amp). Still detection, never a hardcoded support list |
 | Memory | **ICM** | researched 11 alternatives (mem0, agentmemory, Letta, Zep, Graphiti, Cognee, txtai, Memori, SQLite-Memory, memoirs) — none beat it on the actual constraint set (no-daemon + CLI + local + cross-host + cheap adapter) simultaneously; the real defect (SQLite durability) was already fixed upstream |
-| Suggestion timing (what to route, when) | **ours to own** — this is the actual gap nobody else fills well | see PLAN.md; this is the one genuinely-unsolved piece |
+| Suggestion timing (what to route, when) | **`portawhip-router`** — a separate package since 2026-07-21, plugged in through the provider seam | still the one genuinely-unsolved piece, and still nobody else fills it well; extracted so its unfinished state stops being everyone's problem (§1) |
 | Permissions / guardrails | host-native hooks + existing security CLIs (nah/gitleaks/osv-scanner, inherited from v1's registry) | not re-litigated in this project yet |
 | Orchestration (multi-agent team) | **deprioritized**, not rebuilt | v1's `team_kernel.py`/`mutation.py` had passing tests but zero daily-use proof; out of scope until the loader+router prove themselves first |
 
@@ -130,7 +142,7 @@ routing claims) and, where possible, actually running the tool:
   only, detect-first, not owned or rebuilt.
 - **rulesync** (`dyoshikawa/rulesync`) — the sole cross-host fan-out writer,
   added in the writer-consolidation refactor. Won a live 3-way head-to-head
-  (2026-07-13, `docs/writer-consolidation-plan.md`) against `@agents-dev/cli`
+  (2026-07-13, `docs/harness/writer-consolidation-plan.md`) against `@agents-dev/cli`
   and `ai-config-sync-manager`: does both scopes (the others were
   project-only), broader features, idempotent, surgical on shared config.
   Targets are a scoped 12-host list (`rulesync.jsonc`), never `*` — an
@@ -159,12 +171,13 @@ routing claims) and, where possible, actually running the tool:
 2. **`skill_router.py` hook: kill the always-on PUSH form, keep the idea as
    on-demand PULL.** Directly observed misfiring live in this project's own
    planning conversation. The underlying idea (suggest without injecting
-   full content) is sound and is now the actual spec for the Phase 0-4
-   router in PLAN.md — the fix is *timing/mode*, not the concept.
+   full content) is sound and became the spec for the router — the fix is
+   *timing/mode*, not the concept. Push is now silent by default (WS-A), and
+   the router itself lives in `portawhip-router`.
 3. **Language: Node/TS for the loader, not Python (v1's language).** 4 of 5
    delegated tools are npm packages; gluing in the same runtime avoids
-   cross-runtime subprocess overhead. (Router core in PLAN.md is intentionally
-   left language-agnostic beyond "must interop.")
+   cross-runtime subprocess overhead. (The router was left language-agnostic
+   beyond "must interop" — which is part of why it could be extracted cleanly.)
 4. **`cross-spawn` over hand-rolled `shell:true`/`.cmd` detection.** Hit a
    real Windows `EINVAL` bug spawning `.cmd` files directly, and a real
    command-injection lint (unescaped args through `shell:true`) — fixed with
@@ -186,10 +199,12 @@ routing claims) and, where possible, actually running the tool:
    until Codex/Gemini's own behavior is checked.
 8. **Threshold/k moved out of scorer.mjs into `router.config.yaml`.** First
    Phase 1 draft hardcoded `threshold=1, k=5` as JS defaults — caught on
-   review ("hard code มั้ยเนี่ย"). PLAN.md's own spec required these live in
-   recipe header or a config file, not code. Fixed: `core/config.mjs` reads
-   `router.config.yaml` (optional, same fallback values), `scorer.mjs` now
-   takes threshold/k as required call args with no built-in default.
+   review ("hard code มั้ยเนี่ย"). The spec required these live in a recipe
+   header or a config file, not code. Fixed: config is read from
+   `router.config.yaml` (optional, same fallback values) and `scorer.mjs`
+   takes threshold/k as required call args with no built-in default. Those
+   keys now reach the config system as a schema fragment the router provider
+   contributes, so they exist only when the router is installed.
 9. **Registry auto-discovers installed capabilities, not just recipe.yaml's
    3 curated entries.** Same review flagged that recipe.yaml itself was a
    hand-typed list — "ไม่ว่าโหลดจากไหนก็ลิงค์กัน" (link whatever's loaded,
@@ -223,7 +238,7 @@ routing claims) and, where possible, actually running the tool:
     precise router with visible results after v1's high-noise failure — not
     scope creep, a deliberate ask. But the delivered version had 3 real
     bugs, found by audit: (a) never wired into the actually-deployed
-    `server/mcp-server.mjs` (still called plain `scorer.mjs`) — fixed via
+    the router's MCP server (still called plain `scorer.mjs`) — fixed via
     one shared `core/route-entry.mjs` used by both the CLI and the server;
     (b) live eval re-run showed 2 false positives on the exact
     old-hook-regression prompts the eval set exists to catch, and no
@@ -237,7 +252,7 @@ routing claims) and, where possible, actually running the tool:
 12. **Dense semantic retrieval added as a second, additive channel
     (2026-07-06).** Tuning the lexical channel alone hit a proven wall (a real
     paraphrase miss scored *below* a false positive it was tensioned against —
-    no single threshold fixes both). `core/router/dense-embedder.mjs` runs
+    no single threshold fixes both). the router's `dense-embedder.mjs` runs
     BAAI/bge-m3 via `@huggingface/transformers` (MIT, 100+ languages incl.
     Thai, self-downloading, zero setup), fused through the same lane/peakedness
     gate. On by default for MCP server + CLI; the push hook opts out (a fresh
@@ -249,14 +264,14 @@ routing claims) and, where possible, actually running the tool:
     banked: **fix measurement before tuning.** Push (unsolicited interruption)
     now has a hard precision gate + a full→terse→silent per-session repeat
     budget; pull (solicited `route()`) keeps generous recall and unused results
-    earn **no decay** (boost-only). See `docs/router-intelligence.md`.
+    earn **no decay** (boost-only). See the router repo's `docs/router-intelligence.md`.
 14. **Second vision-half activated: bidirectional surface sync (S0–S4,
     2026-07-10).** Until now everything flowed `recipe.yaml → hosts`
     (install/push only). Built as import → canonical → fan-out with **no new
     reconciler**. Surface coverage widened from 3 capability types to 7. (The
     first cut used `.agents/` + `@agents-dev/cli` as the canonical fan-out;
     both were later superseded by rulesync — see #19.) See
-    `docs/sync-connector-plan.md`.
+    `docs/harness/sync-connector-plan.md`.
 15. **Host widening by presence-probe, not by list (2026-07-10).**
     `core/surface/extra-hosts.mjs` adds Pi and Amp as evidence-cited data
     behind a presence gate, kept in a separate `extraHosts` bucket. Inert until
@@ -277,15 +292,16 @@ routing claims) and, where possible, actually running the tool:
     Revisit gate recorded: `docs/archive/ws-b-evidence-gate.md`.
 18. **Structural refactor into concern subfolders (2026-07-11).** `core/` →
     `router/ registry/ surface/ state/`; `scripts/` → `link/ sync/` + root
-    hubs. No behavior change. Any path cited in earlier items of this section,
-    in `PLAN.md`'s phase specs, or in `docs/archive/` predates this move —
-    `core/router-cli.mjs` is now `core/router/router-cli.mjs`, and so on.
+    hubs. No behavior change. Any path cited in earlier items of this section
+    or in `docs/archive/` predates this move. It was also what made the
+    2026-07-21 extraction (#20) mechanical rather than surgical: by then the
+    router was already one directory.
 19. **Writer consolidation — one writer per target file (LOCKED 2026-07-13,
     the biggest recent decision).** The real architectural disease was **many
     backends writing the same host files → drift.** Proven live: on one shared
     Codex MCP target, `ai-config-sync`'s marker block and `@agents-dev`'s
     total-file regen fought forever (hashes never converged — a drift *war*).
-    A 3-way head-to-head (`docs/writer-consolidation-plan.md`) picked **Fork A:
+    A 3-way head-to-head (`docs/harness/writer-consolidation-plan.md`) picked **Fork A:
     `rulesync` as the sole fan-out writer, both scopes.** Distilled rule: the
     disease is specifically **total-ownership writers** (regenerate whole files,
     "do not edit manually") — surgical mergers (add-mcp, marker-block, rulesync
@@ -307,15 +323,28 @@ routing claims) and, where possible, actually running the tool:
     lane) → strategy is **contribute upstream, never add a 3rd sync dep**
     (a separate writer on shared dirs = the drift disease again).
 
-## 6. Current state (2026-07-15)
+21. **Router extracted to its own package (2026-07-21).** The two halves in §1
+    became one package plus a seam. Trigger: the held-out eval put router top-1
+    at 27.5%, and shipping it meant every portawhip install pulled a 500MB
+    embedding model for an unfinished capability. Rather than hide that, the
+    router became `portawhip-router` and portawhip grew a **provider seam** —
+    an optional package contributes config keys, an instruction connector, hook
+    behaviour and recipe entries, all resolved at runtime, never imported.
+    Two invariants keep it honest, both enforced by tests: portawhip may not
+    import a provider (`core/state/provider-boundary.mjs`), and portawhip's own
+    suite passes identically with and without one installed. A missing provider
+    is an absence; an installed-but-broken one is loud. This is
+    "delegate, don't rebuild" turned on ourselves.
 
-Both vision-halves are built and locally verified on this Windows machine.
+## 6. Current state (2026-07-21)
+
+The collection half is built and locally verified on this Windows machine.
 **`HANDOFF.md` is the living state doc — read it for known gaps, bugs found
 and fixed, and what's honestly still unverified. This is the high-altitude
-summary only.** Full suite: **268/268** (`npm test`); `npm run route:eval`
-clean (precision@1 / recall@3 / MRR / abstainAccuracy 1.0, falsePositive 0).
+summary only.** Full suite: **242/242** (`npm test`), passing both with and
+without a capability provider installed.
 
-Half 1 — load + sync:
+Load + sync:
 
 - **Step 1 loader: done, proven live.** `recipe.yaml` + `scripts/load.mjs` +
   `scripts/hosts.mjs` + `scripts/doctor.mjs`. Real MCP/CLI/skill installs,
@@ -333,12 +362,12 @@ Half 1 — load + sync:
   derived per server (`scope-derive.mjs`), not hand-listed. Auto fan-out fires
   from SessionStart at project scope (throttled, propagates only already-
   canonical entries); global apply stays manual. See
-  `docs/writer-consolidation-plan.md`.
+  `docs/harness/writer-consolidation-plan.md`.
 
-Half 2 — router:
+Routing — now `portawhip-router`, kept here for the history:
 
 - **Phase 0–2 (base decision B, registry+scorer, pull-mode MCP server):
-  done.** `server/mcp-server.mjs` exposes `route`/`list_all`, registered on
+  done.** The router's MCP server exposes `route`/`list_all`, registered on
   detected hosts; instruction blocks fanned out (now via rulesync) into the
   hosts' context files, idempotent.
 - **Phase 2.5 + Phase 4 item 3 (hybrid + dense retrieval): done.** Sparse
@@ -353,7 +382,7 @@ Half 2 — router:
 - **Deliberately still open:** the "fresh session calls `route()` unprompted"
   behavioral check can't be proven from inside a running session; global
   auto-apply gate not cleared; push-precision runs on clean feedback data
-  before the next tuning round (`docs/router-intelligence.md`).
+  before the next tuning round (the router repo's `docs/router-intelligence.md`).
 
 - **Explicitly not rebuilt / out of scope:** team-kernel, mutation/
   verification loop, multi-agent orchestration (existed in v1 with passing

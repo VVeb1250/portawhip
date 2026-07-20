@@ -38,7 +38,7 @@ jobs:
           registry-url: https://registry.npmjs.org
       - run: npm ci
       - run: npm test
-      - run: npm run route:eval
+      - run: PORTAWHIP_DISABLE_PROVIDERS=all npm test
       - run: npm audit --audit-level=high
       - run: npm publish --provenance
         env:
