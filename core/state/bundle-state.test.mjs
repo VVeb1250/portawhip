@@ -131,7 +131,7 @@ test("registry: buildIndex composes multiple recipe files into one curated set",
     writeRecipe(foundryPath, [{ id: "tool-a", type: "cli", source: "tool-a", trigger: "alpha task", description: "alpha" }]);
     writeRecipe(rolePath, [{ id: "tool-b", type: "cli", source: "tool-b", trigger: "beta task", description: "beta" }]);
 
-    const index = await buildIndex([foundryPath, rolePath], { discover: false });
+    const index = await buildIndex([foundryPath, rolePath], { discover: false, providerEntries: [] });
     const ids = index.entries.map((e) => e.id).sort();
     assert.deepEqual(ids, ["tool-a", "tool-b"]);
     assert.ok(index.entries.every((e) => e.origin === "recipe"));
@@ -167,7 +167,7 @@ test("registry: buildIndex with a single string path still works exactly as befo
   try {
     const path = join(root, "recipe.yaml");
     writeRecipe(path, [{ id: "solo", type: "cli", source: "solo", trigger: "solo task", description: "solo" }]);
-    const index = await buildIndex(path, { discover: false });
+    const index = await buildIndex(path, { discover: false, providerEntries: [] });
     assert.deepEqual(index.entries.map((e) => e.id), ["solo"]);
   } finally {
     rmSync(root, { recursive: true, force: true });

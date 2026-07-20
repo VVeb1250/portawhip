@@ -7,6 +7,7 @@ import { dirname, resolve, join } from "node:path";
 import * as yaml from "js-yaml";
 import { discoverAll } from "./discover.mjs";
 import { normalizeTriggerSpec } from "./trigger-spec.mjs";
+import { recipeEntriesFromProviders } from "../state/recipe-contributions.mjs";
 
 // Cache lives next to whichever recipe.yaml was actually loaded — not cwd —
 // so this still works when called from a globally-registered MCP server
@@ -102,9 +103,17 @@ export function readRawEntries(recipePath) {
 // contract (used by scripts/load.mjs for install-dispatch) stays a plain
 // array, since install must act on a bundle entry regardless of whether
 // it's installed yet — that's the whole point of installing it.
-function mergeWithProvenance(paths) {
+// Provider-contributed entries (see core/state/recipe-contributions.mjs) go in
+// BEFORE the recipe files, so the precedence chain reads
+// providers < foundry < roles < project recipe.yaml. A provider declares the
+// capability it ships; the project keeps the last word on how it is described.
+function mergeWithProvenance(paths, providerEntries = []) {
   const byId = new Map();
   const sourceById = new Map();
+  for (const entry of providerEntries) {
+    byId.set(entry.id, entry);
+    sourceById.set(entry.id, entry.origin ?? "provider");
+  }
   for (const path of paths) {
     for (const entry of readRawEntries(path)) {
       if (!entry.id || !entry.type) {
@@ -138,9 +147,14 @@ export function isDiscovered(entry, discovered) {
   return discovered.some((e) => e.id === entry.id || (entry.source && e.source === entry.source));
 }
 
-export async function buildIndex(recipePath = "recipe.yaml", { discover = true } = {}) {
+// providerEntries defaults to whatever installed providers contribute. Pass an
+// explicit array (usually []) when a caller needs an index that depends only on
+// its recipe files — curated-only tests do, since what is installed alongside
+// portawhip varies by machine.
+export async function buildIndex(recipePath = "recipe.yaml", { discover = true, providerEntries } = {}) {
   const paths = Array.isArray(recipePath) ? recipePath : [recipePath];
   if (paths.length === 0) throw new Error("buildIndex: at least one recipe path is required");
+  const contributed = providerEntries ?? (await recipeEntriesFromProviders());
   // The project's own recipe.yaml is always last in a compose array (see the
   // precedence note above) and stays the one trusted-without-verification
   // tier — the pre-existing convention that whoever hand-writes an entry
@@ -148,7 +162,7 @@ export async function buildIndex(recipePath = "recipe.yaml", { discover = true }
   // only path, so every entry is trusted and behavior is unchanged from
   // before bundles existed.
   const trustedPath = paths[paths.length - 1];
-  const { byId, sourceById } = mergeWithProvenance(paths);
+  const { byId, sourceById } = mergeWithProvenance(paths, contributed);
 
   const discovered = discover
     ? await discoverAll({ enrichCachePath: enrichCachePathFor(trustedPath) })
@@ -167,15 +181,27 @@ export async function buildIndex(recipePath = "recipe.yaml", { discover = true }
   // — those calls opt out of live machine state on purpose and must stay
   // deterministic.
   const curated = [];
+  // A provider ships the capability it declares, so installing the provider is
+  // itself the confirmation the bundle gate below is asking for. Without this
+  // the entry would be treated as an unverified bundle entry and dropped
+  // whenever discovery could not independently see it — which for an MCP server
+  // means "until the user has already registered it by hand", exactly the
+  // chicken-and-egg the contribution mechanism exists to remove.
+  const providerIds = new Set(contributed.map((entry) => entry.id));
+
   for (const entry of byId.values()) {
-    const fromBundle = sourceById.get(entry.id) !== trustedPath;
+    const source = sourceById.get(entry.id);
+    const fromProvider = providerIds.has(entry.id) && source !== trustedPath;
+    const fromBundle = !fromProvider && source !== trustedPath;
     if (discover && fromBundle && !isDiscovered(entry, discovered)) continue;
     curated.push({
       id: entry.id,
       type: entry.type,
       source: entry.source,
       path: entry.path ?? null,
-      origin: "recipe",
+      // Provenance survives into the index so a surprising entry can be traced
+      // back to the package that supplied it.
+      origin: fromProvider ? source : "recipe",
       route: validateRoute(entry),
     });
   }

@@ -134,7 +134,7 @@ test("trigger specs: skipWhen parses and survives indexing", async () => {
   );
 
   try {
-    const index = await buildIndex(recipe, { discover: false });
+    const index = await buildIndex(recipe, { discover: false, providerEntries: [] });
     assert.deepEqual(index.entries[0].route.skipWhen, ["plain text search", "non-code documents"]);
   } finally {
     rmSync(root, { recursive: true, force: true });
