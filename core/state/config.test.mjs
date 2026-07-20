@@ -11,6 +11,7 @@ import {
   resolveSchema,
   userConfigPath,
 } from "./config.mjs";
+import { FIXTURE_ENV } from "../fixtures/provider-env.mjs";
 
 function fixture() {
   const root = mkdtempSync(join(tmpdir(), "portawhip-config-"));
@@ -60,14 +61,17 @@ test("harness config on its own knows nothing about router keys", () => {
 });
 
 // The whole point of the provider seam: the key space grows when a capability
-// is installed and shrinks when it is not. With the router in this repo it must
-// contribute its keys — if this fails, the seam is wired wrong and the settings
-// tab would silently lose every routing knob.
-test("resolveSchema picks up the installed router provider's keys", async () => {
-  const schema = await resolveSchema();
-  assert.ok(schema.definitions["autoSync.enabled"], "harness keys are always present");
-  assert.ok(schema.definitions.denseEnabled, "router provider did not contribute its keys");
-  assert.ok(schema.definitions.pullHybridThreshold);
+// is installed and shrinks when it is not. Driven by the fixture provider, so
+// this asserts the mechanism rather than any particular capability's keys.
+test("resolveSchema grows the key space when a provider is installed", async () => {
+  const bare = await resolveSchema({ env: {} });
+  assert.ok(bare.definitions["autoSync.enabled"], "harness keys are always present");
+  assert.equal(bare.definitions.fixtureEnabled, undefined, "no provider, no extra keys");
+
+  const withFixture = await resolveSchema({ env: FIXTURE_ENV });
+  assert.ok(withFixture.definitions["autoSync.enabled"]);
+  assert.ok(withFixture.definitions.fixtureEnabled, "the provider did not contribute its keys");
+  assert.ok(withFixture.definitions.fixtureBudget);
 });
 
 test("a schema refuses to let two fragments claim the same key", async () => {

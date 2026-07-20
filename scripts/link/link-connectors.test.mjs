@@ -123,3 +123,27 @@ test("link-connectors: owned windsurf-rule writes always_on frontmatter as the f
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+// A portawhip install with no capability providers must still report status.
+// This threw before ("no capability provider supplies an instruction
+// connector"), which crashed the TUI on a bare install — the exact case the
+// provider seam exists to support. Nothing is expected in the instruction
+// files, so "no-connector" is the honest answer, distinct from "missing".
+test("connector status on a bare install reports no-connector instead of throwing", async () => {
+  const previous = process.env.PORTAWHIP_DISABLE_PROVIDERS;
+  process.env.PORTAWHIP_DISABLE_PROVIDERS = "all";
+  try {
+    const result = await collectConnectorLinks({ command: "status", scope: "project" });
+    assert.ok(result.rows.length > 0, "hosts are still detected without a provider");
+    const statuses = new Set(result.rows.map((row) => row.instructionStatus));
+    assert.ok(statuses.has("no-connector") || statuses.has("mcp-only"));
+    assert.ok(!statuses.has("linked"), "nothing can be linked when no connector exists");
+  } finally {
+    if (previous === undefined) delete process.env.PORTAWHIP_DISABLE_PROVIDERS;
+    else process.env.PORTAWHIP_DISABLE_PROVIDERS = previous;
+  }
+});
+
+test("applyTarget still refuses to act without a connector", () => {
+  assert.throws(() => applyTarget("install", { path: "x", variant: "generic" }), /requires a connector/);
+});

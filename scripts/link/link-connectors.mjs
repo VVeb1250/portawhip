@@ -41,12 +41,14 @@ function parseArgs(argv) {
   return args;
 }
 
-// Which connector a caller means is explicit. The router's is the default only
-// because it is the one this repo ships; nothing here knows its wording.
+// Which connector a caller means is explicit; nothing here knows any wording.
+// Zero connectors is a normal state, not an error: portawhip with no providers
+// installed has nothing to write into instruction files, and reporting that as
+// a status is the honest answer. Throwing here crashed the TUI on a bare
+// install, which is exactly the case the provider seam exists to support.
 async function defaultConnector() {
   const [first] = await connectorsFromProviders();
-  if (!first) throw new Error("no capability provider supplies an instruction connector");
-  return first;
+  return first ?? null;
 }
 
 function normalizeTarget(target) {
@@ -108,6 +110,16 @@ export function applyTarget(command, target, connector) {
   return { changed, linked: hasBlock(target.path, connector.id) };
 }
 
+// "no-connector" is distinct from "missing": nothing is expected in the file,
+// so nothing is wrong. Reporting it as missing would send someone hunting for
+// a broken link that was never supposed to exist.
+function instructionStatusFor(command, target, connector) {
+  if (!connector) return "no-connector";
+  const result = applyTarget(command, target, connector);
+  if (command === "status") return result.linked ? "linked" : "missing";
+  return result.changed ? "changed" : "no-op";
+}
+
 export async function collectConnectorLinks({ command = "status", scope = "project" } = {}) {
   if (command !== "status") {
     throw new Error("link-connectors is read-only; use portawhip sync apply so Rulesync owns the write");
@@ -135,15 +147,12 @@ export async function collectConnectorLinks({ command = "status", scope = "proje
       continue;
     }
     for (const target of targets) {
-      const result = applyTarget(command, target, connector);
-      const instructionStatus =
-        command === "status" ? (result.linked ? "linked" : "missing") : result.changed ? "changed" : "no-op";
       rows.push({
         type: "connector",
         hostId,
         scope,
         mcpStatus,
-        instructionStatus,
+        instructionStatus: instructionStatusFor(command, target, connector),
         path: target.path,
         supported: true,
       });
@@ -156,9 +165,7 @@ export async function collectConnectorLinks({ command = "status", scope = "proje
   for (const hostId of hosts.extraHosts ?? []) {
     const targets = targetsForScope(hostId, scope);
     for (const target of targets) {
-      const result = applyTarget(command, target, connector);
-      const instructionStatus =
-        command === "status" ? (result.linked ? "linked" : "missing") : result.changed ? "changed" : "no-op";
+      const instructionStatus = instructionStatusFor(command, target, connector);
       rows.push({ type: "connector", hostId, scope, mcpStatus: "n/a", instructionStatus, path: target.path, supported: true });
     }
   }

@@ -57,11 +57,15 @@
     readyMarker: ".codegraph"
     readyHint: "codegraph init"
 
+# Routing ships as the separate portawhip-router package, so this entry
+# describes a capability that exists only once the user installs it. install is
+# false because portawhip never pulls a provider in on its own — see the
+# provider seam in core/state/capability-providers.mjs.
 - id: harness-router
   type: mcp
-  source: node
-  path: "."
-  args: ["core/router/server/mcp-server.mjs"]
+  source: portawhip-router
+  args: ["--yes", "--package=portawhip-router", "--", "harness-router"]
+  install: false
   name: harness-router
   scope: project
   route:

@@ -4,12 +4,13 @@ import test from "node:test";
 
 const packageJson = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
 
-test("npm package exposes public npx and MCP entry points", () => {
+test("npm package exposes one public entry point and no capability bins", () => {
   assert.equal(packageJson.private, false);
   assert.equal(packageJson.publishConfig?.access, "public");
   assert.equal(packageJson.bin?.portawhip, "scripts/portawhip.mjs");
-  assert.equal(packageJson.bin?.["portawhip-router"], "core/router/router-cli.mjs");
-  assert.equal(packageJson.bin?.["harness-router"], "core/router/server/mcp-server.mjs");
+  // Routing ships as portawhip-router and brings its own bins. A stale bin
+  // here would resolve to a path that no longer exists.
+  assert.deepEqual(Object.keys(packageJson.bin), ["portawhip"]);
 });
 
 test("npm package declares a supported runtime and a release-safe file allowlist", () => {

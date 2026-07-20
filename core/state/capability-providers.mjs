@@ -65,6 +65,21 @@ async function loadOne(name, specifiers, onError) {
   return null;
 }
 
+// PORTAWHIP_EXTRA_PROVIDERS registers providers that are not in the built-in
+// list — "name=specifier", comma-separated. It is how you point at a provider
+// you are developing locally, and how portawhip's own tests exercise the seam
+// without depending on any particular capability being installed.
+export function extraProviders(env = process.env) {
+  const raw = (env.PORTAWHIP_EXTRA_PROVIDERS ?? "").trim();
+  if (!raw) return {};
+  const registry = {};
+  for (const item of raw.split(",")) {
+    const [name, specifier] = item.split("=").map((part) => part?.trim());
+    if (name && specifier) registry[name] = [specifier];
+  }
+  return registry;
+}
+
 // PORTAWHIP_DISABLE_PROVIDERS turns a provider off without uninstalling it —
 // "all", or a comma-separated list of names. Useful for isolating whether a
 // provider is behind some behaviour, and for running the harness bare.
@@ -80,7 +95,7 @@ export async function loadProviders({ registry = PROVIDER_SPECIFIERS, onError = 
   const disabled = disabledProviders(env);
   if (disabled.has("all")) return [];
   const loaded = [];
-  for (const [name, specifiers] of Object.entries(registry)) {
+  for (const [name, specifiers] of Object.entries({ ...registry, ...extraProviders(env) })) {
     if (disabled.has(name.toLowerCase())) continue;
     const provider = await loadOne(name, specifiers, onError);
     if (provider) loaded.push(provider);
