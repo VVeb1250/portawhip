@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { logEvent } from "../state/feedback.mjs";
+import { logEvent } from "./feedback.mjs";
 import { harvestHardNegatives } from "./eval-harvest.mjs";
 
 function tempRoot() {

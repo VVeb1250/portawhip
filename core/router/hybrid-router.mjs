@@ -1,5 +1,5 @@
 import { buildCapabilityDocs } from "../registry/capability-docs.mjs";
-import { expandWithGraph, loadCapabilityGraph } from "../registry/capability-graph.mjs";
+import { expandWithGraph, loadCapabilityGraph } from "./capability-graph.mjs";
 import { capabilityKind, matchesSuggestKind } from "../registry/capability-kind.mjs";
 import { actionAlignmentFactor } from "./concept-vector.mjs";
 import { denseRetrieve } from "./dense-embedder.mjs";

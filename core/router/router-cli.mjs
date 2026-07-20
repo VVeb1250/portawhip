@@ -5,14 +5,14 @@
 import { loadIndex } from "../registry/registry.mjs";
 import { listAll } from "./scorer.mjs";
 import { runRoute } from "./route-entry.mjs";
-import { compileCapabilityGraph, writeCapabilityGraph } from "../registry/capability-graph-compiler.mjs";
+import { compileCapabilityGraph, writeCapabilityGraph } from "./capability-graph-compiler.mjs";
 import { runRouterEval, runRouterEvalComparison, loadEvalSet } from "./router-eval.mjs";
 import { runLooEval } from "./loo-eval.mjs";
 import { runBlindEval } from "./blind-eval.mjs";
 import { loadRuntimeConfig } from "../state/config.mjs";
-import { computeFactors } from "../state/feedback.mjs";
+import { computeFactors } from "./feedback.mjs";
 import { stackFactors, combineFactors } from "../state/stack-detect.mjs";
-import { harvestHardNegatives } from "../registry/eval-harvest.mjs";
+import { harvestHardNegatives } from "./eval-harvest.mjs";
 import { runEnrichment } from "../registry/enrich.mjs";
 import { readActiveSelection, resolveRecipePaths, resolveRuntimeRoot } from "../state/bundle-state.mjs";
 import { dirname, resolve, join } from "node:path";

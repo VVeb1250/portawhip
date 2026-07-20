@@ -4,7 +4,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { logEvent, readEvents } from "../state/feedback.mjs";
+import { logEvent, readEvents } from "./feedback.mjs";
 import { createSessionLedger, logPullEmissions } from "./session-ledger.mjs";
 
 const HIT = {

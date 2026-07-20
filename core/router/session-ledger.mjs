@@ -1,6 +1,6 @@
 // R5 presentation ledger. Retrieval remains untouched: this module only
 // compiles already-routed hits into fresh/reuse/mute output states.
-import { logEvent, readEvents } from "../state/feedback.mjs";
+import { logEvent, readEvents } from "./feedback.mjs";
 
 export const REUSE_NOTE = "already available - reuse it";
 

@@ -16,7 +16,7 @@ import { loadIndex, readCachedIndex } from "../../core/registry/registry.mjs";
 import { runRoute } from "../../core/router/route-entry.mjs";
 import { pointerFor } from "../../core/registry/capability-docs.mjs";
 import { loadRuntimeConfig } from "../../core/state/config.mjs";
-import { computeFactors, logEvent, readEvents } from "../../core/state/feedback.mjs";
+import { computeFactors, logEvent, readEvents } from "../../core/router/feedback.mjs";
 import { stackFactors, combineFactors } from "../../core/state/stack-detect.mjs";
 import { readActiveSelection, resolveRecipePaths } from "../../core/state/bundle-state.mjs";
 import { isSyntheticPrompt } from "../../core/router/prompt-hygiene.mjs";

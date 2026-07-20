@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { buildIndex } from "../registry/registry.mjs";
-import { compileCapabilityGraph } from "../registry/capability-graph-compiler.mjs";
+import { compileCapabilityGraph } from "./capability-graph-compiler.mjs";
 import { route, listAll, scoreEntry } from "./scorer.mjs";
 import { buildCapabilityDocs } from "../registry/capability-docs.mjs";
 import { routeHybrid } from "./hybrid-router.mjs";

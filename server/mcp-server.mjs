@@ -13,7 +13,7 @@ import { listAll } from "../core/router/scorer.mjs";
 import { compactRouteResult, explainRoute } from "../core/router/route-entry.mjs";
 import { createSessionLedger, logPullEmissions } from "../core/router/session-ledger.mjs";
 import { loadRuntimeConfig } from "../core/state/config.mjs";
-import { computeFactors, logEvent } from "../core/state/feedback.mjs";
+import { computeFactors, logEvent } from "../core/router/feedback.mjs";
 import { stackFactors, combineFactors } from "../core/state/stack-detect.mjs";
 import { readActiveSelection, resolveRecipePaths } from "../core/state/bundle-state.mjs";
 import { warmDense, setDenseCachePath, primeDocCache } from "../core/router/dense-embedder.mjs";
