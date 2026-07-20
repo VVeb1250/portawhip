@@ -5,7 +5,7 @@ import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import * as yaml from "js-yaml";
-import { configKeys, loadRuntimeConfig, parseConfigValue, projectConfigPath, userConfigPath } from "../core/state/config.mjs";
+import { HARNESS_SCHEMA, configKeys, loadRuntimeConfig, parseConfigValue, projectConfigPath, resolveSchema, userConfigPath } from "../core/state/config.mjs";
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const BASE_CONFIG_PATH = join(ROOT, "router.config.yaml");
@@ -88,6 +88,7 @@ function targetPath(scope, context) {
 function configForScope(scope, context) {
   if (scope !== "effective") return readDocument(targetPath(scope, context));
   return loadRuntimeConfig({
+    schema: context.schema,
     basePath: context.basePath ?? BASE_CONFIG_PATH,
     cwd: context.cwd,
     home: context.home,
@@ -96,6 +97,9 @@ function configForScope(scope, context) {
   });
 }
 
+// `schema` decides which keys exist. Callers that want the full installed key
+// space — the CLI, the TUI — resolve it once with resolveSchema() and pass it
+// in; the harness schema alone is the floor, not a guess at what is installed.
 export function runConfigCommand(argv, options = {}) {
   const context = {
     cwd: options.cwd ?? process.cwd(),
@@ -103,6 +107,7 @@ export function runConfigCommand(argv, options = {}) {
     env: options.env ?? process.env,
     platform: options.platform ?? process.platform,
     basePath: options.basePath,
+    schema: options.schema ?? HARNESS_SCHEMA,
   };
   const args = parseArgs(argv);
   if (args.action === "path") {
@@ -112,7 +117,8 @@ export function runConfigCommand(argv, options = {}) {
   if (args.action === "list") return { action: "list", scope: args.scope, config: configForScope(args.scope, context) };
   const key = args.positional[0];
   if (!key) throw new Error(args.action + " requires a config key");
-  if (!configKeys().includes(key)) throw new Error("unknown config key " + JSON.stringify(key) + ". Valid keys: " + configKeys().join(", "));
+  const { schema } = context;
+  if (!configKeys({ schema }).includes(key)) throw new Error("unknown config key " + JSON.stringify(key) + ". Valid keys: " + configKeys({ schema }).join(", "));
   if (args.action === "get") {
     return { action: "get", scope: args.scope, key, value: valueAt(configForScope(args.scope, context), key) };
   }
@@ -120,7 +126,7 @@ export function runConfigCommand(argv, options = {}) {
   const document = readDocument(path);
   if (args.action === "set") {
     if (args.positional.length < 2) throw new Error("set requires a value");
-    const value = parseConfigValue(key, args.positional[1]);
+    const value = parseConfigValue(key, args.positional[1], { schema });
     setValue(document, key, value);
     writeDocument(path, document);
     return { action: "set", scope: args.scope, path, key, value };
@@ -161,7 +167,7 @@ function printResult(result, json) {
 async function main() {
   const argv = process.argv.slice(2);
   if (["--help", "-h", "help"].includes(argv[0])) return printHelp();
-  printResult(runConfigCommand(argv), argv.includes("--json"));
+  printResult(runConfigCommand(argv, { schema: await resolveSchema() }), argv.includes("--json"));
 }
 
 const isMain = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;

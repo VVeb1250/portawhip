@@ -21,7 +21,7 @@ This is the contributor track: fork, branch, PR. Nothing here can push to `main`
 
    ```bash
    npm test
-   npm run route:eval
+   PORTAWHIP_DISABLE_PROVIDERS=all npm test
    npm run doctor
    npm audit
    ```

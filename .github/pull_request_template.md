@@ -13,6 +13,6 @@ npm test
 ## Checklist
 
 - [ ] Added or updated a test before changing behavior
-- [ ] Ran the release gates locally: `npm test`, `npm run route:eval`, `npm run doctor`, `npm audit`
+- [ ] Ran the release gates locally: `npm test`, `PORTAWHIP_DISABLE_PROVIDERS=all npm test`, `npm run doctor`, `npm audit`
 - [ ] No credentials or machine-specific generated state committed
 - [ ] Docs updated if user-visible behavior changed

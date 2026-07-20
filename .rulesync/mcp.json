@@ -31,7 +31,7 @@
       "type": "stdio",
       "command": "C:\\Program Files\\nodejs\\node.exe",
       "args": [
-        "E:\\portable-harness-v2\\server\\mcp-server.mjs"
+        "E:\\harness-router\\server\\mcp-server.mjs"
       ]
     },
     "memory": {

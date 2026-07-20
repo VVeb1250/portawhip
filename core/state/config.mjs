@@ -2,49 +2,22 @@ import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import * as yaml from "js-yaml";
+import { HARNESS_SCHEMA, mergeSchemas } from "./config-schema.mjs";
+import { providerConfigSchemas } from "./capability-providers.mjs";
 
-export const DEFAULTS = {
-  engine: "hybrid",
-  threshold: 2,
-  recipeThreshold: 1,
-  hybridThreshold: 350,
-  pullHybridThreshold: 150,
-  hybridRecipeThreshold: 130,
-  hybridToolThreshold: 80,
-  graphPath: ".hp-state/capability-graph.json",
-  graphBoost: 0.25,
-  k: 5,
-  peakednessRatio: 1.05,
-  denseEnabled: true,
-  denseThreshold: 0.6,
-  pushMode: "silent",
-  pushBudgetChars: 640,
-  pushMinConfidence: 0.75,
-  pushMaxMentionsPerSession: 2,
-  autoSync: { enabled: false, throttleMinutes: 60 },
-};
+// This module owns the config *machinery* — where files live, how layers stack,
+// how a value is validated. It does not own the key space; a schema does. The
+// harness schema is the default so every caller that only cares about harness
+// settings keeps working unchanged, and callers that need the full installed key
+// space (the CLI, the TUI settings tab) resolve one first.
+export { HARNESS_SCHEMA, mergeSchemas } from "./config-schema.mjs";
 
-export const CONFIG_DEFINITIONS = {
-  engine: { type: "enum", values: ["keyword", "hybrid"], description: "Retrieval mode used to match requests with capabilities." },
-  threshold: { type: "number", min: 0, description: "Minimum keyword score for general capability matches." },
-  recipeThreshold: { type: "number", min: 0, description: "Minimum keyword score for curated recipe matches." },
-  hybridThreshold: { type: "number", min: 0, description: "Minimum hybrid score for general capability matches." },
-  pullHybridThreshold: { type: "number", min: 0, description: "Minimum hybrid score for general capability matches on the pull path, where route() is handed a distilled action rather than a raw prompt." },
-  hybridRecipeThreshold: { type: "number", min: 0, description: "Minimum hybrid score for curated recipe matches." },
-  hybridToolThreshold: { type: "number", min: 0, description: "Minimum hybrid score for MCP and CLI tool matches." },
-  graphPath: { type: "string", description: "Path to the compiled capability relationship graph." },
-  graphBoost: { type: "number", min: 0, description: "Extra score applied to candidates related in the capability graph." },
-  k: { type: "integer", min: 1, description: "Maximum number of routing results returned per result lane." },
-  peakednessRatio: { type: "number", min: 1, description: "Required lead of the top match over the runner-up to avoid noisy results." },
-  denseEnabled: { type: "boolean", description: "Enable semantic embedding matches in the hybrid router." },
-  denseThreshold: { type: "number", min: 0, max: 1, description: "Minimum semantic similarity accepted as a dense match." },
-  pushMode: { type: "enum", values: ["silent", "legacy"], description: "Controls automatic capability suggestions; silent is the safe default." },
-  pushBudgetChars: { type: "integer", min: 1, description: "Maximum character budget for a legacy automatic suggestion." },
-  pushMinConfidence: { type: "number", min: 0, max: 1, description: "Minimum confidence required for an automatic suggestion." },
-  pushMaxMentionsPerSession: { type: "integer", min: 0, description: "Maximum times one capability may be suggested in a session." },
-  "autoSync.enabled": { type: "boolean", description: "Enable background propagation of already-canonical configuration." },
-  "autoSync.throttleMinutes": { type: "number", min: 0, description: "Minimum minutes between background sync attempts." },
-};
+// Assembles the harness schema plus whatever installed providers contribute.
+// Async because provider discovery is; resolve it once at an entry point and
+// thread the result down rather than re-resolving per call.
+export async function resolveSchema(options = {}) {
+  return mergeSchemas(HARNESS_SCHEMA, ...(await providerConfigSchemas(options)));
+}
 
 function readConfigDocument(path) {
   if (!path || !existsSync(path)) return {};
@@ -55,29 +28,6 @@ function readConfigDocument(path) {
   } catch (error) {
     throw new Error("cannot read portawhip config " + path + ": " + error.message);
   }
-}
-
-function normalizeConfig(raw) {
-  return {
-    engine: ["keyword", "hybrid"].includes(raw.engine) ? raw.engine : DEFAULTS.engine,
-    threshold: typeof raw.threshold === "number" ? raw.threshold : DEFAULTS.threshold,
-    recipeThreshold: typeof raw.recipeThreshold === "number" ? raw.recipeThreshold : DEFAULTS.recipeThreshold,
-    hybridThreshold: typeof raw.hybridThreshold === "number" ? raw.hybridThreshold : DEFAULTS.hybridThreshold,
-    pullHybridThreshold: typeof raw.pullHybridThreshold === "number" ? raw.pullHybridThreshold : DEFAULTS.pullHybridThreshold,
-    hybridRecipeThreshold: typeof raw.hybridRecipeThreshold === "number" ? raw.hybridRecipeThreshold : DEFAULTS.hybridRecipeThreshold,
-    hybridToolThreshold: typeof raw.hybridToolThreshold === "number" ? raw.hybridToolThreshold : DEFAULTS.hybridToolThreshold,
-    graphPath: typeof raw.graphPath === "string" && raw.graphPath.trim() ? raw.graphPath : DEFAULTS.graphPath,
-    graphBoost: typeof raw.graphBoost === "number" ? raw.graphBoost : DEFAULTS.graphBoost,
-    k: typeof raw.k === "number" ? raw.k : DEFAULTS.k,
-    peakednessRatio: typeof raw.peakednessRatio === "number" ? raw.peakednessRatio : DEFAULTS.peakednessRatio,
-    denseEnabled: typeof raw.denseEnabled === "boolean" ? raw.denseEnabled : DEFAULTS.denseEnabled,
-    denseThreshold: typeof raw.denseThreshold === "number" ? raw.denseThreshold : DEFAULTS.denseThreshold,
-    pushMode: ["legacy", "silent"].includes(raw.pushMode) ? raw.pushMode : DEFAULTS.pushMode,
-    pushBudgetChars: typeof raw.pushBudgetChars === "number" ? raw.pushBudgetChars : DEFAULTS.pushBudgetChars,
-    pushMinConfidence: typeof raw.pushMinConfidence === "number" ? raw.pushMinConfidence : DEFAULTS.pushMinConfidence,
-    pushMaxMentionsPerSession: typeof raw.pushMaxMentionsPerSession === "number" ? raw.pushMaxMentionsPerSession : DEFAULTS.pushMaxMentionsPerSession,
-    autoSync: normalizeAutoSync(raw.autoSync),
-  };
 }
 
 export function userConfigPath({ home = homedir(), env = process.env, platform = process.platform } = {}) {
@@ -92,7 +42,7 @@ export function projectConfigPath(cwd = process.cwd()) {
   return resolve(cwd, ".portawhip", "config.yaml");
 }
 
-export function loadRuntimeConfig({ basePath = null, cwd = process.cwd(), home = homedir(), env = process.env, platform = process.platform } = {}) {
+export function loadRuntimeConfig({ schema = HARNESS_SCHEMA, basePath = null, cwd = process.cwd(), home = homedir(), env = process.env, platform = process.platform } = {}) {
   const standardEnv = { ...env };
   delete standardEnv.PORTAWHIP_CONFIG;
   const paths = [
@@ -102,34 +52,43 @@ export function loadRuntimeConfig({ basePath = null, cwd = process.cwd(), home =
     env.PORTAWHIP_CONFIG ? resolve(env.PORTAWHIP_CONFIG) : null,
   ].filter(Boolean);
   let raw = {};
-  let graphSource = null;
+  // Tracks which file last set a relative path value, so it can be resolved
+  // against that file's directory rather than the process cwd.
+  const pathSources = {};
   for (const path of [...new Set(paths)]) {
     if (!existsSync(path)) continue;
     const layer = readConfigDocument(path);
-    raw = {
-      ...raw,
-      ...layer,
-      autoSync: { ...(raw.autoSync ?? {}), ...(layer.autoSync ?? {}) },
-    };
-    if (typeof layer.graphPath === "string" && layer.graphPath.trim()) graphSource = path;
+    // Nested mappings a schema marks as mergeable stack key-by-key across
+    // layers; everything else is replaced by the higher-priority layer. The
+    // merge is computed from the accumulator BEFORE the spread overwrites it.
+    const merged = {};
+    for (const key of schema.mergeKeys ?? []) {
+      if (layer[key] && typeof layer[key] === "object") merged[key] = { ...(raw[key] ?? {}), ...layer[key] };
+    }
+    raw = { ...raw, ...layer, ...merged };
+    for (const [key, definition] of Object.entries(schema.definitions ?? {})) {
+      if (definition.type === "path" && typeof layer[key] === "string" && layer[key].trim()) pathSources[key] = path;
+    }
   }
-  const config = normalizeConfig(raw);
-  if (graphSource && !isAbsolute(config.graphPath)) config.graphPath = resolve(dirname(graphSource), config.graphPath);
+  const config = schema.normalize(raw);
+  for (const [key, source] of Object.entries(pathSources)) {
+    if (typeof config[key] === "string" && !isAbsolute(config[key])) config[key] = resolve(dirname(source), config[key]);
+  }
   return config;
 }
 
-export function loadConfig(path = "router.config.yaml") {
-  if (!existsSync(path)) return { ...DEFAULTS, autoSync: { ...DEFAULTS.autoSync } };
-  return normalizeConfig(readConfigDocument(path));
+export function loadConfig(path = "router.config.yaml", { schema = HARNESS_SCHEMA } = {}) {
+  if (!existsSync(path)) return schema.normalize({});
+  return schema.normalize(readConfigDocument(path));
 }
 
-export function configKeys() {
-  return Object.keys(CONFIG_DEFINITIONS);
+export function configKeys({ schema = HARNESS_SCHEMA } = {}) {
+  return Object.keys(schema.definitions ?? {});
 }
 
-export function parseConfigValue(key, rawValue) {
-  const definition = CONFIG_DEFINITIONS[key];
-  if (!definition) throw new Error("unknown config key " + JSON.stringify(key) + ". Valid keys: " + configKeys().join(", "));
+export function parseConfigValue(key, rawValue, { schema = HARNESS_SCHEMA } = {}) {
+  const definition = schema.definitions?.[key];
+  if (!definition) throw new Error("unknown config key " + JSON.stringify(key) + ". Valid keys: " + configKeys({ schema }).join(", "));
   let value;
   if (definition.type === "boolean") {
     if (!["true", "false"].includes(rawValue)) throw new Error(key + " must be true or false");
@@ -149,14 +108,8 @@ export function parseConfigValue(key, rawValue) {
     throw new Error(key + " must be between " + definition.min + " and " + definition.max);
   }
   if (definition.min != null && value < definition.min) throw new Error(key + " must be at least " + definition.min);
-  if (definition.max != null && value > definition.max) throw new Error(key + " must be at most " + definition.max);
+  if (definition.max != null) {
+    if (value > definition.max) throw new Error(key + " must be at most " + definition.max);
+  }
   return value;
-}
-
-function normalizeAutoSync(raw) {
-  if (!raw || typeof raw !== "object") return { ...DEFAULTS.autoSync };
-  return {
-    enabled: typeof raw.enabled === "boolean" ? raw.enabled : DEFAULTS.autoSync.enabled,
-    throttleMinutes: typeof raw.throttleMinutes === "number" ? raw.throttleMinutes : DEFAULTS.autoSync.throttleMinutes,
-  };
 }

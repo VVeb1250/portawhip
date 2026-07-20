@@ -3,7 +3,7 @@
   "private": false,
   "type": "module",
   "version": "0.5.0",
-  "description": "Tools collector + context-cheap router for AI agent hosts: dispatches capability install to add-mcp/mise/asm, then routes the right one at the right moment instead of loading everything into context.",
+  "description": "One control plane for the tools, skills, MCP servers, commands, agents and hooks your AI coding agents use: discover them once, then plug them into every host.",
   "license": "MIT",
   "homepage": "https://github.com/VVeb1250/portawhip#readme",
   "bugs": {
@@ -18,34 +18,40 @@
     "mcp",
     "model-context-protocol",
     "agent-tools",
-    "tool-router",
+    "agent-skills",
     "claude-code",
     "codex",
     "gemini-cli",
+    "cursor",
     "developer-tools"
   ],
   "engines": {
     "node": ">=20"
   },
   "bin": {
-    "portawhip": "scripts/portawhip.mjs",
-    "portawhip-router": "core/router/router-cli.mjs",
-    "harness-router": "server/mcp-server.mjs"
+    "portawhip": "scripts/portawhip.mjs"
+  },
+  "exports": {
+    "./registry": "./core/registry/registry.mjs",
+    "./registry/docs": "./core/registry/capability-docs.mjs",
+    "./registry/kind": "./core/registry/capability-kind.mjs",
+    "./registry/enrich": "./core/registry/enrich.mjs",
+    "./state/config": "./core/state/config.mjs",
+    "./state/stack-detect": "./core/state/stack-detect.mjs",
+    "./state/bundle-state": "./core/state/bundle-state.mjs",
+    "./package.json": "./package.json"
   },
   "files": [
     "adapters/",
     "core/",
-    "docs/router-eval-set.jsonl",
     "CHANGELOG.md",
     "SECURITY.md",
     "recipes/",
     ".rulesync/",
     "rulesync.jsonc",
     "scripts/",
-    "server/",
     "hooks.manifest.yaml",
     "recipe.yaml",
-    "router.config.yaml",
     "surface-matrix.yaml",
     "VISION.md"
   ],
@@ -74,29 +80,24 @@
     "bundles": "node scripts/bundles.mjs list",
     "bundles:status": "node scripts/bundles.mjs status",
     "bundles:select": "node scripts/bundles.mjs select",
-    "test": "node --test",
-    "route": "node core/router/router-cli.mjs route",
-    "route:list": "node core/router/router-cli.mjs list",
-    "route:eval": "node core/router/router-cli.mjs eval --engine hybrid",
-    "route:compare": "node core/router/router-cli.mjs compare",
-    "route:graph": "node core/router/router-cli.mjs graph-compile --out .hp-state/capability-graph.json",
-    "route:enrich": "node core/router/router-cli.mjs enrich"
+    "test": "node --test"
   },
   "dependencies": {
-    "@huggingface/transformers": "^4.2.0",
-    "@modelcontextprotocol/sdk": "^1.29.0",
     "add-mcp": "^1.13.0",
     "agent-skill-manager": "^2.7.0",
     "ansi-escapes": "^7.3.0",
     "cross-spawn": "^7.0.6",
     "ink": "^5.2.1",
     "js-yaml": "^5.2.1",
-    "minisearch": "^7.2.0",
     "react": "^18.3.1",
-    "rulesync": "9.6.3",
-    "zod": "^4.4.3"
+    "rulesync": "9.6.3"
   },
   "devDependencies": {
     "ai-config-sync-manager": "0.1.7"
+  },
+  "peerDependenciesMeta": {
+    "portawhip-router": {
+      "optional": true
+    }
   }
 }

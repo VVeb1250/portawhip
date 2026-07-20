@@ -10,8 +10,9 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync, rmSync } from "node
 import { dirname, resolve } from "node:path";
 import { listInstalledServers } from "add-mcp";
 import { detectHosts } from "../hosts.mjs";
-import { blockForVariant, removeBlock, upsertBlock } from "../../adapters/instructions/generate.mjs";
+import { blockForVariant, hasBlock, removeBlock, upsertBlock } from "../../adapters/instructions/generate.mjs";
 import { CONNECTOR_TARGETS, targetsForHost } from "../../core/surface/connector-targets.mjs";
+import { connectorsFromProviders } from "../../core/state/connectors.mjs";
 
 const VALID_COMMANDS = new Set(["status", "install", "remove"]);
 const VALID_SCOPES = new Set(["project", "global"]);
@@ -40,10 +41,14 @@ function parseArgs(argv) {
   return args;
 }
 
-function hasHarnessBlock(path) {
-  if (!existsSync(path)) return false;
-  const content = readFileSync(path, "utf8");
-  return content.includes("<!-- harness-router:start -->") && content.includes("<!-- harness-router:end -->");
+// Which connector a caller means is explicit; nothing here knows any wording.
+// Zero connectors is a normal state, not an error: portawhip with no providers
+// installed has nothing to write into instruction files, and reporting that as
+// a status is the honest answer. Throwing here crashed the TUI on a bare
+// install, which is exactly the case the provider seam exists to support.
+async function defaultConnector() {
+  const [first] = await connectorsFromProviders();
+  return first ?? null;
 }
 
 function normalizeTarget(target) {
@@ -79,27 +84,40 @@ async function mcpLinkedByHost(hostIds) {
 // preamble, duplicating the frontmatter on every re-run. Own the whole file
 // instead — install writes it verbatim (idempotent), remove deletes it (no
 // orphan always-on rule left behind on uninstall).
-function applyOwnedTarget(command, target) {
+function applyOwnedTarget(command, target, connector) {
   if (command === "remove") {
     if (!existsSync(target.path)) return { changed: false, linked: false };
     rmSync(target.path);
     return { changed: true, linked: false };
   }
   mkdirSync(dirname(target.path), { recursive: true });
-  const next = `${blockForVariant(target.variant)}\n`;
+  const next = `${blockForVariant(target.variant, connector)}\n`;
   const current = existsSync(target.path) ? readFileSync(target.path, "utf8") : null;
   const changed = current !== next;
   if (changed) writeFileSync(target.path, next);
   return { changed, linked: true };
 }
 
-export function applyTarget(command, target) {
-  if (command === "status") return { changed: false, linked: hasHarnessBlock(target.path) };
-  if (target.owned) return applyOwnedTarget(command, target);
+export function applyTarget(command, target, connector) {
+  if (!connector) throw new Error("applyTarget requires a connector descriptor");
+  if (command === "status") return { changed: false, linked: hasBlock(target.path, connector.id) };
+  if (target.owned) return applyOwnedTarget(command, target, connector);
   mkdirSync(dirname(target.path), { recursive: true });
   const changed =
-    command === "install" ? upsertBlock(target.path, blockForVariant(target.variant)) : removeBlock(target.path);
-  return { changed, linked: hasHarnessBlock(target.path) };
+    command === "install"
+      ? upsertBlock(target.path, blockForVariant(target.variant, connector), { id: connector.id })
+      : removeBlock(target.path, { id: connector.id });
+  return { changed, linked: hasBlock(target.path, connector.id) };
+}
+
+// "no-connector" is distinct from "missing": nothing is expected in the file,
+// so nothing is wrong. Reporting it as missing would send someone hunting for
+// a broken link that was never supposed to exist.
+function instructionStatusFor(command, target, connector) {
+  if (!connector) return "no-connector";
+  const result = applyTarget(command, target, connector);
+  if (command === "status") return result.linked ? "linked" : "missing";
+  return result.changed ? "changed" : "no-op";
 }
 
 export async function collectConnectorLinks({ command = "status", scope = "project" } = {}) {
@@ -109,6 +127,7 @@ export async function collectConnectorLinks({ command = "status", scope = "proje
   const hosts = await detectHosts();
   const hostIds = hosts.mcpHosts;
   const mcpLinks = await mcpLinkedByHost(hostIds);
+  const connector = await defaultConnector();
   const rows = [];
 
   for (const hostId of hostIds) {
@@ -128,15 +147,12 @@ export async function collectConnectorLinks({ command = "status", scope = "proje
       continue;
     }
     for (const target of targets) {
-      const result = applyTarget(command, target);
-      const instructionStatus =
-        command === "status" ? (result.linked ? "linked" : "missing") : result.changed ? "changed" : "no-op";
       rows.push({
         type: "connector",
         hostId,
         scope,
         mcpStatus,
-        instructionStatus,
+        instructionStatus: instructionStatusFor(command, target, connector),
         path: target.path,
         supported: true,
       });
@@ -149,9 +165,7 @@ export async function collectConnectorLinks({ command = "status", scope = "proje
   for (const hostId of hosts.extraHosts ?? []) {
     const targets = targetsForScope(hostId, scope);
     for (const target of targets) {
-      const result = applyTarget(command, target);
-      const instructionStatus =
-        command === "status" ? (result.linked ? "linked" : "missing") : result.changed ? "changed" : "no-op";
+      const instructionStatus = instructionStatusFor(command, target, connector);
       rows.push({ type: "connector", hostId, scope, mcpStatus: "n/a", instructionStatus, path: target.path, supported: true });
     }
   }

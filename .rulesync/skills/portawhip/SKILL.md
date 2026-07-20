@@ -60,13 +60,16 @@ Do not enable SessionStart auto-sync until one real project reconcile and a
 fake-HOME global backup/apply/verify/restore gate pass. Add a watchdog only if
 live-probed SessionStart coverage leaves a demonstrated gap.
 
-## Health and routing
+## Health and inventory
 
 ```bash
 npm run doctor
 npm run surface
-npm run route:list
+npm run tui -- --summary
 ```
+
+Routing is a separate package (`portawhip-router`). Its commands live there;
+portawhip itself no longer has a `route:*` script.
 
 The host capability catalog is evidence-driven. Do not mark a hook or host
 surface supported solely from documentation; require a live probe.

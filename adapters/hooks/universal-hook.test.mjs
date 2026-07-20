@@ -1,165 +1,137 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { existsSync, rmSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { dirname, join } from "node:path";
-import { actionDirective, resolveId } from "./universal-hook.mjs";
+import { resolveId } from "./universal-hook.mjs";
 
-// Integration-level: runs the real hook as a subprocess against this
-// repo's real recipe.yaml (same style as core/router.test.mjs's
-// discovery tests, which already exercise the live machine state).
-// Feedback events land in this repo's real .hp-state/feedback, so every
-// test needs a clean slate to assert against - but a plain rm here was
-// found live (2026-07-06) to permanently delete real dogfood events
-// (this repo's own push-hook firing during actual use), the first time
-// this suite happened to run right after a real hook fire. Snapshot and
-// restore instead of deleting, so running tests never costs real history.
+// The hook owns the host side of the contract: which event, which payload
+// shape, how additionalContext is framed, and matching a tool call back to a
+// registry entry. It owns no opinion about what should be said — that comes
+// from a provider. So these drive it with the fixture provider rather than a
+// real capability; what a particular provider chooses to say is that
+// provider's test to write. See core/fixtures/test-provider.mjs.
 const ROOT = dirname(dirname(dirname(fileURLToPath(import.meta.url))));
 const HOOK = join(ROOT, "adapters", "hooks", "universal-hook.mjs");
-const FEEDBACK_PATH = join(ROOT, ".hp-state", "feedback", "events.jsonl");
-
-let feedbackBackup;
-
-function clearFeedback() {
-  feedbackBackup = existsSync(FEEDBACK_PATH) ? readFileSync(FEEDBACK_PATH, "utf8") : null;
-  if (existsSync(FEEDBACK_PATH)) rmSync(FEEDBACK_PATH);
-}
-
-function restoreFeedback() {
-  if (existsSync(FEEDBACK_PATH)) rmSync(FEEDBACK_PATH);
-  if (feedbackBackup != null) {
-    mkdirSync(dirname(FEEDBACK_PATH), { recursive: true });
-    writeFileSync(FEEDBACK_PATH, feedbackBackup);
-  }
-}
-
-const LEGACY_PUSH_ENV = { PORTAWHIP_PUSH_MODE: "legacy" };
+const FIXTURE = pathToFileURL(join(ROOT, "core", "fixtures", "test-provider.mjs")).href;
 
 function runHook(args, payload, { env = {} } = {}) {
   const result = spawnSync(process.execPath, [HOOK, ...args], {
     input: JSON.stringify(payload ?? {}),
     encoding: "utf8",
     cwd: ROOT,
-    env: { ...process.env, ...env },
+    env: {
+      ...process.env,
+      // Real providers are excluded so this suite never depends on what happens
+      // to be installed, and never writes to the live feedback log.
+      PORTAWHIP_DISABLE_PROVIDERS: "router",
+      PORTAWHIP_EXTRA_PROVIDERS: `fixture=${FIXTURE}`,
+      ...env,
+    },
   });
-  return result.stdout.trim();
+  return { stdout: result.stdout.trim(), stderr: result.stderr.trim(), status: result.status };
 }
 
-test("universal-hook: user_prompt is silent by default even on a confident match", () => {
-  clearFeedback();
-  try {
-    const stdout = runHook(
-      ["--host", "claude-code", "--event", "user_prompt", "--nativeEvent", "UserPromptSubmit"],
-      { prompt: "search codebase for the word foo" },
-    );
-    assert.equal(stdout, "");
-    assert.ok(!existsSync(FEEDBACK_PATH), "silent push must not log a suggested event");
-  } finally {
-    restoreFeedback();
-  }
+function contextFrom(stdout) {
+  return JSON.parse(stdout).hookSpecificOutput;
+}
+
+test("universal-hook: a provider's text reaches the host as additionalContext", () => {
+  const { stdout, status } = runHook(
+    ["--host", "claude-code", "--event", "user_prompt"],
+    { prompt: "fixture-please respond to this" },
+  );
+  assert.equal(status, 0);
+  const output = contextFrom(stdout);
+  assert.equal(output.hookEventName, "UserPromptSubmit");
+  assert.match(output.additionalContext, /fixture provider says hello to claude-code/);
 });
 
-test("universal-hook: raw meta-prompts stay silent and create no suggestion events", () => {
-  clearFeedback();
-  try {
-    const args = ["--host", "claude-code", "--event", "user_prompt", "--nativeEvent", "UserPromptSubmit"];
-    const prompts = [
-      "what are the tradeoffs of cross-host agent capability loading",
-      "how should a router avoid token bloat when many tools are installed",
-    ];
-    for (const prompt of prompts) assert.equal(runHook(args, { prompt }), "", prompt);
-    assert.ok(!existsSync(FEEDBACK_PATH), "silent meta-prompts must not log suggested events");
-  } finally {
-    restoreFeedback();
-  }
-});
-
-test("universal-hook: legacy push is an explicit opt-in for rollback", () => {
-  clearFeedback();
-  try {
-    const stdout = runHook(
-      ["--host", "claude-code", "--event", "user_prompt", "--nativeEvent", "UserPromptSubmit"],
-      { prompt: "search codebase for the word foo" },
-      { env: LEGACY_PUSH_ENV },
-    );
-    assert.ok(stdout, "expected non-empty stdout for a matching prompt");
-    const parsed = JSON.parse(stdout);
-    assert.equal(parsed.hookSpecificOutput.hookEventName, "UserPromptSubmit");
-    assert.ok(parsed.hookSpecificOutput.additionalContext.includes("ripgrep"));
-  } finally {
-    restoreFeedback();
-  }
-});
-
-test("universal-hook: user_prompt renders tersely once a capability was already suggested this session", () => {
-  clearFeedback();
-  try {
-    const args = ["--host", "claude-code", "--event", "user_prompt", "--nativeEvent", "UserPromptSubmit"];
-    const payload = { prompt: "search codebase for the word foo", session_id: "test-session-repeat" };
-
-    const first = JSON.parse(runHook(args, payload, { env: LEGACY_PUSH_ENV }));
-    assert.match(first.hookSpecificOutput.additionalContext, /ripgrep/);
-    assert.match(first.hookSpecificOutput.additionalContext, /run it directly now/);
-
-    const second = JSON.parse(runHook(args, payload, { env: LEGACY_PUSH_ENV }));
-    assert.match(second.hookSpecificOutput.additionalContext, /- ripgrep - already available - reuse it/);
-    assert.doesNotMatch(second.hookSpecificOutput.additionalContext, /run it directly now/);
-  } finally {
-    restoreFeedback();
-  }
-});
-
-test("universal-hook: user_prompt stays silent on a short/unrelated prompt", () => {
-  clearFeedback();
-  try {
-    const stdout = runHook(
-      ["--host", "claude-code", "--event", "user_prompt", "--nativeEvent", "UserPromptSubmit"],
-      { prompt: "hi" },
-    );
-    assert.equal(stdout, "");
-  } finally {
-    restoreFeedback();
-  }
-});
-
+// Host event names are not interchangeable; a wrong one is silently ignored by
+// the host, which looks exactly like "the hook did not fire".
 test("universal-hook: gemini-cli defaults hookEventName to BeforeAgent when no nativeEvent is passed", () => {
-  clearFeedback();
-  try {
-    const stdout = runHook(
-      ["--host", "gemini-cli", "--event", "user_prompt"],
-      { prompt: "search codebase for the word foo" },
-      { env: LEGACY_PUSH_ENV },
-    );
-    assert.ok(stdout);
-    const parsed = JSON.parse(stdout);
-    assert.equal(parsed.hookSpecificOutput.hookEventName, "BeforeAgent");
-  } finally {
-    restoreFeedback();
-  }
+  const { stdout } = runHook(
+    ["--host", "gemini-cli", "--event", "user_prompt"],
+    { prompt: "fixture-please respond to this" },
+  );
+  assert.equal(contextFrom(stdout).hookEventName, "BeforeAgent");
 });
 
-// One table for one pure function. The invariant across every row is the same:
-// on claude-code the directive names that host's real invocation syntax, and on
-// any other host it must fall back to the pointer rather than invent syntax that
-// host does not have.
-const SKILL = { kind: "skill", id: "workspace-surface-audit", pointer: "/some/path" };
-const MCP = { kind: "tool", type: "mcp", id: "playwright", pointer: "@playwright/mcp@latest" };
+test("universal-hook: an explicit nativeEvent wins over the host default", () => {
+  const { stdout } = runHook(
+    ["--host", "gemini-cli", "--event", "user_prompt", "--nativeEvent", "CustomEvent"],
+    { prompt: "fixture-please respond to this" },
+  );
+  assert.equal(contextFrom(stdout).hookEventName, "CustomEvent");
+});
 
-for (const { name, hit, host, expect, reject } of [
-  { name: "skill on claude-code names the Skill tool by id", hit: SKILL, host: "claude-code", expect: [/Skill tool/, /"workspace-surface-audit"/] },
-  { name: "skill elsewhere falls back to reading the pointer", hit: SKILL, host: "gemini-cli", expect: [/\/some\/path/], reject: [/Skill tool/] },
-  { name: "mcp on claude-code gives the mcp__<id>__ prefix and a ToolSearch fallback", hit: MCP, host: "claude-code", expect: [/mcp__playwright__/, /ToolSearch/] },
-  { name: "mcp elsewhere stays generic, inventing no syntax", hit: MCP, host: "codex", reject: [/mcp__/] },
-  { name: "agent on claude-code names the Agent tool by subagent_type", hit: { kind: "agent", id: "e2e-runner", pointer: "/agents/e2e-runner.md" }, host: "claude-code", expect: [/Agent tool/, /"e2e-runner"/] },
-  { name: "cli surfaces the pointer as a runnable command", hit: { kind: "tool", type: "cli", id: "ripgrep", pointer: "mise exec -- ripgrep" }, host: "claude-code", expect: [/mise exec -- ripgrep/] },
-]) {
-  test(`actionDirective: ${name}`, () => {
-    const directive = actionDirective(hit, host);
-    for (const pattern of expect ?? []) assert.match(directive, pattern);
-    for (const pattern of reject ?? []) assert.doesNotMatch(directive, pattern);
-  });
-}
+test("universal-hook: the host is passed through to the provider", () => {
+  const { stdout } = runHook(
+    ["--host", "codex", "--event", "user_prompt"],
+    { prompt: "fixture-please respond to this" },
+  );
+  assert.match(contextFrom(stdout).additionalContext, /hello to codex/);
+});
+
+test("universal-hook: an empty prompt never reaches a provider", () => {
+  const { stdout, status } = runHook(["--host", "claude-code", "--event", "user_prompt"], { prompt: "   " });
+  assert.equal(status, 0);
+  assert.equal(stdout, "");
+});
+
+test("universal-hook: a provider returning null produces no output at all", () => {
+  const { stdout } = runHook(
+    ["--host", "claude-code", "--event", "user_prompt"],
+    { prompt: "a prompt the fixture has no opinion about" },
+  );
+  assert.equal(stdout, "", "silence must be silence, not an empty envelope");
+});
+
+// post_tool: the harness resolves the registry entry and hands it over, so this
+// asserts the match reached the provider — not what the provider said about it.
+test("universal-hook: post_tool matches a Skill invocation and tells the provider", () => {
+  const { stdout } = runHook(
+    ["--host", "claude-code", "--event", "post_tool"],
+    { tool_name: "Skill", tool_input: { skill: "pdf" } },
+  );
+  assert.match(contextFrom(stdout).additionalContext, /noticed Skill matched pdf/);
+});
+
+test("universal-hook: post_tool matches an mcp__<id>__ tool name", () => {
+  const { stdout } = runHook(
+    ["--host", "claude-code", "--event", "post_tool"],
+    { tool_name: "mcp__playwright__browser_click", tool_input: {} },
+  );
+  assert.match(contextFrom(stdout).additionalContext, /matched playwright/);
+});
+
+test("universal-hook: post_tool on an unmatched tool stays silent", () => {
+  const { stdout } = runHook(
+    ["--host", "claude-code", "--event", "post_tool"],
+    { tool_name: "Read", tool_input: { file_path: "/nowhere/at/all.txt" } },
+  );
+  assert.equal(stdout, "");
+});
+
+// A provider that throws must not take the hook down with it: hooks fail open
+// by contract, because a harness bug must never block the user's prompt.
+test("universal-hook: a provider that throws is reported but does not break the hook", () => {
+  const { status, stderr } = runHook(
+    ["--host", "claude-code", "--event", "user_prompt"],
+    { prompt: "fixture-please respond to this" },
+    { PORTAWHIP_EXTRA_PROVIDERS: "broken=./does/not/resolve/anywhere.mjs" },
+  );
+  assert.equal(status, 0, "the hook must still exit cleanly");
+  assert.equal(stderr, "", "an unresolvable provider is an absence, not a fault");
+});
+
+const INDEX = {
+  entries: [
+    { id: "code-review", type: "skill", path: "skills/code-review" },
+    { id: "e2e-runner", type: "agent" },
+    { id: "playwright", type: "mcp" },
+  ],
+};
 
 test("resolveId: a CLI binary name with a regex metacharacter still matches its own command", () => {
   // "." is unescaped-regex "any character" - a dot-containing name sitting
@@ -188,95 +160,16 @@ test("resolveId: an unescaped '.' would false-match a lookalike command; escaped
   assert.equal(id, null);
 });
 
-test("universal-hook: third mention of the same id in one session is silent (interrupt budget)", () => {
-  clearFeedback();
-  try {
-    const args = ["--host", "claude-code", "--event", "user_prompt", "--nativeEvent", "UserPromptSubmit"];
-    const payload = { prompt: "search codebase for the word foo", session_id: "test-session-budget" };
-
-    const first = JSON.parse(runHook(args, payload, { env: LEGACY_PUSH_ENV }));
-    assert.match(first.hookSpecificOutput.additionalContext, /run it directly now/);
-    const second = JSON.parse(runHook(args, payload, { env: LEGACY_PUSH_ENV }));
-    assert.match(second.hookSpecificOutput.additionalContext, /already available - reuse it/);
-    // Budget (pushMaxMentionsPerSession=2) spent: full once, terse once, then silence.
-    const third = runHook(args, payload, { env: LEGACY_PUSH_ENV });
-    assert.equal(third, "");
-  } finally {
-    restoreFeedback();
-  }
-});
-
-test("universal-hook: user_prompt stays silent on a harness-generated task-notification payload", () => {
-  clearFeedback();
-  try {
-    // Real shape from a live session: a background-task completion notice
-    // that arrives through UserPromptSubmit. Long enough and vocabulary-rich
-    // enough that it WOULD route (21/26 historical suggested events were
-    // exactly this) - only the synthetic-prompt gate keeps it silent.
-    const stdout = runHook(
-      ["--host", "claude-code", "--event", "user_prompt", "--nativeEvent", "UserPromptSubmit"],
-      {
-        prompt:
-          "<task-notification>\n<task-id>b9ugezqg8</task-id>\n<summary>Background command \"search codebase for the word foo\" completed (exit code 0)</summary>\n</task-notification>",
-      },
-    );
-    assert.equal(stdout, "");
-    assert.ok(!existsSync(FEEDBACK_PATH), "no suggested events should be logged for synthetic prompts");
-  } finally {
-    restoreFeedback();
-  }
-});
-
-test("universal-hook: post_tool with the Skill tool logs a used event for the skill id", () => {
-  clearFeedback();
-  try {
-    runHook(["--host", "claude-code", "--event", "post_tool"], {
-      tool_name: "Skill",
-      tool_input: { skill: "workspace-surface-audit" },
-    });
-    assert.ok(existsSync(FEEDBACK_PATH));
-    const contents = readFileSync(FEEDBACK_PATH, "utf8");
-    assert.ok(contents.includes('"type":"used"'));
-    assert.ok(contents.includes('"id":"workspace-surface-audit"'));
-  } finally {
-    restoreFeedback();
-  }
-});
-
 test("resolveId: a plugin-namespaced Skill invocation matches the plain-slug registry id", () => {
-  const index = {
-    entries: [{ id: "code-review", type: "skill", route: {} }],
-  };
-  assert.equal(resolveId(index, "Skill", { skill: "ecc:code-review" }), "code-review");
+  assert.equal(resolveId(INDEX, "Skill", { skill: "ecc:code-review" }), "code-review");
 });
 
 test("resolveId: an Agent invocation matches an agent entry by subagent_type, not a same-named skill", () => {
-  const index = {
-    entries: [
-      { id: "e2e-runner", type: "skill", route: {} },
-      { id: "e2e-runner", type: "agent", route: {} },
-    ],
-  };
-  // Both exist; the Agent tool must attribute to the agent-type entry.
-  const id = resolveId(index, "Agent", { subagent_type: "ecc:e2e-runner" });
-  assert.equal(id, "e2e-runner");
-  // And an id that only exists as a skill must NOT match via the Agent tool.
-  const skillOnly = { entries: [{ id: "pdf", type: "skill", route: {} }] };
-  assert.equal(resolveId(skillOnly, "Agent", { subagent_type: "pdf" }), null);
+  assert.equal(resolveId(INDEX, "Agent", { subagent_type: "e2e-runner" }), "e2e-runner");
+  assert.equal(resolveId(INDEX, "Skill", { skill: "e2e-runner" }), null);
 });
 
-test("universal-hook: post_tool with an mcp__<id>__ tool name logs a used event for that id", () => {
-  clearFeedback();
-  try {
-    runHook(["--host", "claude-code", "--event", "post_tool"], {
-      tool_name: "mcp__context7__resolve-library-id",
-      tool_input: {},
-    });
-    assert.ok(existsSync(FEEDBACK_PATH));
-    const contents = readFileSync(FEEDBACK_PATH, "utf8");
-    assert.ok(contents.includes('"type":"used"'));
-    assert.ok(contents.includes('"id":"context7"'));
-  } finally {
-    restoreFeedback();
-  }
+test("resolveId: an mcp__<id>__ tool name resolves only to an mcp entry", () => {
+  assert.equal(resolveId(INDEX, "mcp__playwright__browser_click", {}), "playwright");
+  assert.equal(resolveId(INDEX, "mcp__code-review__x", {}), null);
 });

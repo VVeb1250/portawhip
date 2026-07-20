@@ -10,7 +10,7 @@
 [![Node.js 20+](https://img.shields.io/badge/Node.js-20%2B-339933?logo=nodedotjs&logoColor=white)](https://nodejs.org/)
 [![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-Stop loading every capability into every prompt. Portawhip discovers what is installed, keeps agent hosts aligned, and surfaces only the capability that fits the task.
+Discover the tools, skills, MCP servers, commands, agents and hooks already installed across your agent hosts — then keep every host aligned on them.
 
 </div>
 
@@ -29,64 +29,47 @@ npm install --global portawhip
 portawhip
 ```
 
-No repository clone is required for normal use. The npm package provides three executables: `portawhip` for the interactive TUI, `portawhip-router` for direct routing, and `harness-router` for MCP hosts.
-
-Route a task directly from npm:
-
-```bash
-npx --yes --package=portawhip -- portawhip-router route --prompt "inspect this PDF and extract its tables"
-```
-
-Portawhip returns a short, actionable pointer—or nothing. Abstaining on weak matches is a feature, so unrelated prompts stay clean.
+No repository clone is required for normal use. The npm package provides one executable, `portawhip`, for the interactive TUI.
 
 ## What it solves
 
 AI agent setups drift quickly: one host knows about an MCP server, another has the useful skill, and every tool description competes for context. Portawhip gives that sprawl one lightweight control plane:
 
 - **Discover** capabilities already installed across Claude Code, Codex, Gemini CLI, Cursor, VS Code/Copilot, OpenCode, Zed, Windsurf, Cline, Pi, and Amp.
-- **Route** with a hybrid lexical + local semantic engine instead of dumping the full catalog into context.
 - **Sync** tools, skills, commands, agents, MCP configuration, and supported hooks across hosts.
+- **Extend** through capability providers — optional packages that add config keys, instruction connectors, and hook behaviour without portawhip depending on them.
 - **Stay safe** with read-only status/preview defaults and explicit confirmation for writes in the TUI.
-- **Learn quietly** from whether suggestions were used, without sending prompts to a hosted model.
 
-## Three ways to use it
+## How to use it
 
-### 1. Interactive TUI
+### Interactive TUI
 
 ```bash
 npx --yes portawhip
 ```
 
-The seven tabs cover overview, config sync, connectors, hooks, enrichment, the capability catalog, and router settings. Press `7` to configure user/project overrides, or `h`/`?` for the full key map. Config writes and repair/remove actions require confirmation.
+The seven tabs cover overview, config sync, connectors, hooks, enrichment, the capability catalog, and settings. The settings tab shows the keys of whatever providers you have installed. Press `7` to configure user/project overrides, or `h`/`?` for the full key map. Config writes and repair/remove actions require confirmation.
 
-### 2. Router CLI
+### Capability providers
+
+Routing lives in a separate package, [`portawhip-router`](https://github.com/VVeb1250/portawhip-router).
+Portawhip collects capabilities; the router decides which one to mention for a
+given task, instead of dumping the catalogue into the model's context.
 
 ```bash
-npx --yes --package=portawhip -- portawhip-router list --type skill
-npx --yes --package=portawhip -- portawhip-router route --prompt "run an accessibility-focused browser test"
+npm install portawhip portawhip-router
 ```
 
-Dense retrieval uses a local multilingual embedding model and warms in the background. Add `--dense-block` when deterministic full semantic retrieval matters more than startup latency.
+Installing it is the whole of the wiring. Portawhip resolves providers at
+runtime, so the router's settings appear in `portawhip config`, its instruction
+connector goes out to your hosts on the next sync, and the universal hook starts
+asking it what to say. Uninstall it and all of that goes away — portawhip keeps
+working, just quieter.
 
-### 3. MCP connector
-
-Add this stdio server to any MCP-compatible host:
-
-```json
-{
-  "mcpServers": {
-    "harness-router": {
-      "command": "npx",
-      "args": ["--yes", "--package=portawhip", "--", "harness-router"]
-    }
-  }
-}
-```
-
-The server exposes:
-
-- `route(query)` — find the best installed capability for a concrete action.
-- `list_all(type?)` — inspect the catalog, optionally filtered by capability type.
+That seam is open: a provider is any package exporting a `configSchema`, a
+`connector`, or `hooks`. `PORTAWHIP_EXTRA_PROVIDERS=name=<specifier>` registers
+one you are developing locally, and `PORTAWHIP_DISABLE_PROVIDERS` turns one off
+without uninstalling it.
 
 ## Manage a workspace
 
@@ -117,7 +100,7 @@ The packaged defaults are now overridable without cloning or editing the npm pac
 
 Configuration is layered from lowest to highest priority:
 
-1. packaged <code>router.config.yaml</code>
+1. packaged defaults
 2. user config (<code>%APPDATA%portawhipconfig.yaml</code> on Windows, <code>$XDG_CONFIG_HOME/portawhip/config.yaml</code> or <code>~/.config/portawhip/config.yaml</code> elsewhere)
 3. <code>&lt;project&gt;/.portawhip/config.yaml</code>
 4. the file named by <code>PORTAWHIP_CONFIG</code>
@@ -141,7 +124,7 @@ installed tools + skills + MCP servers + agent surfaces
        MCP pull       CLI / TUI      optional hooks
 ```
 
-The loader delegates installation to maintained tools (`add-mcp`, `mise`, and `agent-skill-manager`) instead of rebuilding package management. The router combines curated entries from `recipe.yaml` with live discovery, then applies confidence, intent, and per-lane peakedness gates. See [VISION.md](VISION.md) for the design rationale.
+The loader delegates installation to maintained tools (`add-mcp`, `mise`, and `agent-skill-manager`) instead of rebuilding package management. The registry combines curated entries from `recipe.yaml` with live discovery of what each host already has. See [VISION.md](VISION.md) for the design rationale.
 
 ## Useful commands
 
@@ -150,11 +133,9 @@ The loader delegates installation to maintained tools (`add-mcp`, `mise`, and `a
 | Interactive TUI | `npx --yes portawhip` |
 | Show effective configuration | <code>npx --yes portawhip config list</code> |
 | Set a user preference | <code>npx --yes portawhip config set &lt;key&gt; &lt;value&gt;</code> |
-| List discovered skills | `npx --yes --package=portawhip -- portawhip-router list --type skill` |
-| Route a task | `npx --yes --package=portawhip -- portawhip-router route --prompt "your task"` |
 | Global install | `npm install --global portawhip` |
 
-Repository-level commands such as `npm test`, `npm run doctor`, and `npm run route:eval` are for contributors working from a source checkout.
+Repository-level commands such as `npm test` and `npm run doctor` are for contributors working from a source checkout.
 
 ## Supported surfaces
 

@@ -11,6 +11,12 @@ import {
   nextChoiceDraft,
   runConfigWrite,
 } from "./tui-config.mjs";
+import { resolveSchema } from "../core/state/config.mjs";
+import { FIXTURE_ENV } from "../core/fixtures/provider-env.mjs";
+
+// The settings tab renders whatever the installed providers declare, so these
+// resolve the real schema rather than assuming a fixed key list.
+const schema = await resolveSchema({ env: FIXTURE_ENV });
 
 function fixtureRunner(calls) {
   return (argv) => {
@@ -18,8 +24,8 @@ function fixtureRunner(calls) {
     const scopeIndex = argv.indexOf("--scope");
     const scope = scopeIndex >= 0 ? argv[scopeIndex + 1] : "effective";
     const configs = {
-      effective: { denseEnabled: true, autoSync: { throttleMinutes: 15 } },
-      user: { denseEnabled: false },
+      effective: { fixtureEnabled: true, autoSync: { throttleMinutes: 15 } },
+      user: { fixtureEnabled: false },
       project: { autoSync: { throttleMinutes: 15 } },
     };
     return argv[0] === "list" ? { config: configs[scope] } : { action: argv[0], key: argv[1] };
@@ -28,9 +34,9 @@ function fixtureRunner(calls) {
 
 test("TUI settings rows show effective values and both override scopes", () => {
   const calls = [];
-  const rows = collectConfigRows({ runner: fixtureRunner(calls) });
+  const rows = collectConfigRows({ schema, runner: fixtureRunner(calls) });
 
-  const dense = rows.find((row) => row.key === "denseEnabled");
+  const dense = rows.find((row) => row.key === "fixtureEnabled");
   assert.equal(dense.effective, true);
   assert.equal(dense.user, false);
   assert.equal(dense.project, undefined);
@@ -54,35 +60,35 @@ test("TUI config writes delegate to the validated config command", () => {
   const calls = [];
   const runner = fixtureRunner(calls);
 
-  runConfigWrite({ action: "set", key: "denseEnabled", value: "false", scope: "project", runner });
-  runConfigWrite({ action: "unset", key: "denseEnabled", scope: "user", runner });
+  runConfigWrite({ schema, action: "set", key: "fixtureEnabled", value: "false", scope: "project", runner });
+  runConfigWrite({ schema, action: "unset", key: "fixtureEnabled", scope: "user", runner });
 
   assert.deepEqual(calls, [
-    ["set", "denseEnabled", "false", "--scope", "project"],
-    ["unset", "denseEnabled", "--scope", "user"],
+    ["set", "fixtureEnabled", "false", "--scope", "project"],
+    ["unset", "fixtureEnabled", "--scope", "user"],
   ]);
 });
 
 test("boolean and enum drafts cycle through valid choices without typing", () => {
-  assert.equal(nextChoiceDraft("denseEnabled", "true", 1), "false");
-  assert.equal(nextChoiceDraft("denseEnabled", "false", -1), "true");
-  assert.equal(nextChoiceDraft("engine", "hybrid", 1), "keyword");
-  assert.equal(nextChoiceDraft("engine", "keyword", -1), "hybrid");
+  assert.equal(nextChoiceDraft("fixtureEnabled", "true", 1, { schema }), "false");
+  assert.equal(nextChoiceDraft("fixtureEnabled", "false", -1, { schema }), "true");
+  assert.equal(nextChoiceDraft("fixtureMode", "quiet", 1, { schema }), "loud");
+  assert.equal(nextChoiceDraft("fixtureMode", "loud", -1, { schema }), "quiet");
 });
 
 test("numeric drafts accept only their numeric format", () => {
-  assert.equal(appendConfigInput("k", "1", "2"), "12");
-  assert.equal(appendConfigInput("k", "1", "."), "1");
-  assert.equal(appendConfigInput("k", "1", "x"), "1");
+  assert.equal(appendConfigInput("fixtureBudget", "1", "2", { schema }), "12");
+  assert.equal(appendConfigInput("fixtureBudget", "1", ".", { schema }), "1");
+  assert.equal(appendConfigInput("fixtureBudget", "1", "x", { schema }), "1");
 
-  assert.equal(appendConfigInput("denseThreshold", "0", "."), "0.");
-  assert.equal(appendConfigInput("denseThreshold", "0.", "5"), "0.5");
-  assert.equal(appendConfigInput("denseThreshold", "0.5", "."), "0.5");
-  assert.equal(appendConfigInput("denseThreshold", "0.5", "x"), "0.5");
+  assert.equal(appendConfigInput("fixtureRatio", "0", ".", { schema }), "0.");
+  assert.equal(appendConfigInput("fixtureRatio", "0.", "5", { schema }), "0.5");
+  assert.equal(appendConfigInput("fixtureRatio", "0.5", ".", { schema }), "0.5");
+  assert.equal(appendConfigInput("fixtureRatio", "0.5", "x", { schema }), "0.5");
 });
 
 test("free-text drafts still accept path characters", () => {
-  assert.equal(appendConfigInput("graphPath", "graphs", "/custom.json"), "graphs/custom.json");
+  assert.equal(appendConfigInput("fixturePath", "graphs", "/custom.json", { schema }), "graphs/custom.json");
 });
 test("interactive TUI exposes a settings tab and its key map", () => {
   const path = fileURLToPath(new URL("./tui.mjs", import.meta.url));
@@ -91,12 +97,12 @@ test("interactive TUI exposes a settings tab and its key map", () => {
   assert.match(source, /settings tab: g scope, e edit, u unset/);
 });
 test("every TUI setting explains its purpose and accepted value", () => {
-  const rows = collectConfigRows({ runner: fixtureRunner([]) });
+  const rows = collectConfigRows({ schema, runner: fixtureRunner([]) });
   assert.ok(rows.length > 0);
   assert.ok(rows.every((row) => typeof row.description === "string" && row.description.length > 10));
 
-  assert.equal(rows.find((row) => row.key === "engine").inputHint, "allowed: keyword | hybrid");
-  assert.equal(rows.find((row) => row.key === "denseEnabled").inputHint, "allowed: false | true");
-  assert.equal(rows.find((row) => row.key === "denseThreshold").inputHint, "range: 0 to 1");
-  assert.equal(rows.find((row) => row.key === "k").inputHint, "minimum: 1");
+  assert.equal(rows.find((row) => row.key === "fixtureMode").inputHint, "allowed: quiet | loud");
+  assert.equal(rows.find((row) => row.key === "fixtureEnabled").inputHint, "allowed: false | true");
+  assert.equal(rows.find((row) => row.key === "fixtureRatio").inputHint, "range: 0 to 1");
+  assert.equal(rows.find((row) => row.key === "fixtureBudget").inputHint, "range: 1 to 1000");
 });

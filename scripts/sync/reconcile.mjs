@@ -306,7 +306,13 @@ function printResult(result, json) {
   console.log(`sync ${result.command} (${result.scope}): ${result.status}`);
   const rows = result.results ?? [result];
   for (const row of rows) {
-    console.log(`${row.scope}: ${row.status} (${row.targets?.length ?? 0} target(s))`);
+    // Report both numbers. Printing only the target count next to the word
+    // "drift" read as "43 files have drifted" when 43 was every target being
+    // watched and 4 had actually moved — a scary number for a small problem.
+    const targets = row.targets?.length ?? 0;
+    const drifted = row.drift?.length ?? 0;
+    const summary = drifted > 0 ? `${drifted} of ${targets} target(s) drifted` : `${targets} target(s) clean`;
+    console.log(`${row.scope}: ${row.status} (${summary})`);
     if (row.backupDir) console.log(`  backup: ${row.backupDir}`);
     for (const item of row.drift ?? []) console.log(`  drift: ${item.path} (${item.status})`);
   }

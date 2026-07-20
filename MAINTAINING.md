@@ -20,7 +20,7 @@ Contributors never touch `main` directly, can't publish, and every PR they open 
 
 ```bash
 # edit directly on main
-npm test && npm run route:eval && npm run doctor && npm audit
+npm test && PORTAWHIP_DISABLE_PROVIDERS=all npm test && npm run doctor && npm audit
 git add <files>
 git commit -m "..."
 git push
@@ -51,7 +51,7 @@ Flow ([.github/workflows/release-please.yml](.github/workflows/release-please.ym
 
 1. Every push to `main` runs `release-please`. It maintains a standing "Release PR" that accumulates the changelog from your commit messages since the last release, with the version bump already computed from those commits.
 2. When you're ready to ship, merge that Release PR. release-please then tags the merge commit (`vX.Y.Z`) and cuts a GitHub Release — this is the "tag-triggered" moment.
-3. The same workflow detects the fresh tag (`release_created` output) and runs the `publish` job: `npm test`, `npm run route:eval`, `npm audit --audit-level=high`, then `npm publish --provenance`. (`npm run doctor` is deliberately excluded here — it shells out to `add-mcp`/`mise`/`agent-skill-manager` to check *this machine's* installed capabilities, which a fresh CI runner never has. Useful before a manual local publish; meaningless as a CI gate.)
+3. The same workflow detects the fresh tag (`release_created` output) and runs the `publish` job: `npm test`, `npm test` again with providers disabled, `npm audit --audit-level=high`, then `npm publish --provenance`. (`npm run doctor` is deliberately excluded here — it shells out to `add-mcp`/`mise`/`agent-skill-manager` to check *this machine's* installed capabilities, which a fresh CI runner never has. Useful before a manual local publish; meaningless as a CI gate.)
 
 The `publish` job can also be fired manually (`workflow_dispatch`) to retry a publish against the current `main` tip without waiting for a new release commit — the recovery path if the gate ever breaks after a release is already tagged.
 

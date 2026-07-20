@@ -57,30 +57,6 @@
     readyMarker: ".codegraph"
     readyHint: "codegraph init"
 
-- id: harness-router
-  type: mcp
-  source: node
-  path: "."
-  args: ["server/mcp-server.mjs"]
-  name: harness-router
-  scope: project
-  route:
-    triggers:
-      [
-        "harness-router",
-        "portawhip",
-        "hybrid-router.mjs",
-        "sparse-retriever.mjs",
-        "router-cli.mjs",
-        "fix the router",
-        "improve the router",
-      ]
-    description: "Inspect or improve this repo's harness-router/portawhip routing source"
-    skipWhen: ["using an installed capability without changing the router", "unrelated product routing"]
-    when: [user_prompt]
-    inject: hint
-    action: inspect_code
-
 - id: portawhip
   # This repo's own management skill (skills/portawhip/SKILL.md). Curated so
   # the router surfaces it when the user talks about importing/syncing tools
